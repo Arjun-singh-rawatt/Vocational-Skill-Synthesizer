@@ -46,6 +46,14 @@ app.use('/api/auth', authRouter);
 import sessionsRouter from './routes/sessions';
 app.use('/api/sessions', sessionsRouter);
 
+// Vocab routes
+import vocabRouter from './routes/vocab';
+app.use('/api/vocab', vocabRouter);
+
+// Progress routes
+import progressRouter from './routes/progress';
+app.use('/api/progress', progressRouter);
+
 // Rate limiter for session creation and ask endpoints (30 requests per 15 mins)
 export const sessionRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
