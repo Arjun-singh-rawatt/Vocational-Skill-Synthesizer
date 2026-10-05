@@ -38,6 +38,10 @@ if (!fs.existsSync(uploadsDir)) {
 // Health check route
 app.use('/api', healthRouter);
 
+// Auth routes
+import authRouter from './routes/auth';
+app.use('/api/auth', authRouter);
+
 // Rate limiter for session creation and ask endpoints (30 requests per 15 mins)
 export const sessionRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
