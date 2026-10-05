@@ -183,18 +183,20 @@ export async function analyzeMediaWithGemini(options: {
   const uploadedFile = await ai.files.upload({
     file: options.filePath,
     mimeType: options.mimeType,
-  });
+  } as any);
 
   console.log(`[Gemini] Uploaded file name: ${uploadedFile.name}. Polling until ACTIVE...`);
   let activeFile = uploadedFile;
   let attempts = 0;
-  while (activeFile.state === 'PROCESSING' && attempts < 30) {
+  while ((activeFile as any).state === 'PROCESSING' && attempts < 30) {
     await new Promise((resolve) => setTimeout(resolve, 3000));
-    activeFile = await ai.files.get({ name: uploadedFile.name });
+    if (uploadedFile.name) {
+      activeFile = await ai.files.get({ name: uploadedFile.name });
+    }
     attempts++;
   }
 
-  if (activeFile.state === 'FAILED') {
+  if ((activeFile as any).state === 'FAILED') {
     throw new Error('Gemini Files API failed to process media file.');
   }
 
@@ -239,7 +241,7 @@ Ensure timestamps in key_details use mm:ss format. Include verbatim transcript a
       const response = await ai.models.generateContent({
         model: env.GEMINI_MODEL,
         contents: [
-          { role: 'user', parts: [{ text: COACHING_SYSTEM_INSTRUCTION + '\n\n' + prompt }, { fileData: { fileUri: activeFile.uri, mimeType: activeFile.mimeType } }] }
+          { role: 'user', parts: [{ text: COACHING_SYSTEM_INSTRUCTION + '\n\n' + prompt }, { fileData: { fileUri: (activeFile as any).uri || '', mimeType: (activeFile as any).mimeType || options.mimeType } }] }
         ],
         config: {
           responseMimeType: 'application/json',
@@ -251,13 +253,17 @@ Ensure timestamps in key_details use mm:ss format. Include verbatim transcript a
     } catch (fallbackErr: any) {
       console.error(`[Gemini] Fallback path also failed: ${fallbackErr.message}`);
       // Clean up uploaded file before throwing
-      await cleanupGeminiFile(ai, activeFile.name);
+      if (activeFile.name) {
+        await cleanupGeminiFile(ai, activeFile.name);
+      }
       throw fallbackErr;
     }
   }
 
   // Always attempt to delete uploaded file after analysis
-  await cleanupGeminiFile(ai, activeFile.name);
+  if (activeFile.name) {
+    await cleanupGeminiFile(ai, activeFile.name);
+  }
 
   // Validate JSON response with zod
   let report: IReport;
