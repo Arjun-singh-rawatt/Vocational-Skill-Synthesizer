@@ -9,7 +9,7 @@ import { Session } from '../models/Session';
 import { User } from '../models/User';
 import { env } from '../config/env';
 import { getMediaDuration, detectAudioSilence } from '../services/media';
-import { analyzeMediaWithGemini } from '../services/gemini';
+import { analyzeMediaWithGemini, askGeminiFollowUp } from '../services/gemini';
 import { calculateFluencyIndex } from '../services/fluency';
 import { calculateStreak } from '../services/streak';
 import { checkAndMarkSavedWordsLearned } from '../services/vocab';
@@ -149,6 +149,65 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     res.status(200).json(session);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to fetch session' });
+  }
+});
+
+const askSchema = z.object({
+  question: z.string().min(1, 'Question cannot be empty'),
+});
+
+// POST /api/sessions/:id/ask
+router.post('/:id/ask', authMiddleware, sessionRateLimiter, async (req: AuthRequest, res: Response) => {
+  try {
+    const parseResult = askSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ error: parseResult.error.errors[0].message });
+    }
+
+    const { question } = parseResult.data;
+
+    const session = await Session.findOne({ _id: req.params.id, userId: req.userId });
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    if (session.status !== 'done') {
+      return res.status(400).json({ error: 'Session report is not yet ready for follow-up questions' });
+    }
+
+    const transcript = session.report?.transcript || '';
+    const reportSummary = session.report?.overall_summary || session.report?.plan?.summary || '';
+
+    let answer = '';
+    let isFallback = false;
+
+    if (env.DEMO_MODE) {
+      answer = `[Demo Mode] In your recording at 00:12, you spoke with good clarity, though reducing vocalized pauses ('you know') will make your delivery sound more authoritative.`;
+      isFallback = false;
+    } else {
+      const chatRes = await askGeminiFollowUp({
+        interactionId: session.interactionId,
+        question,
+        transcript,
+        reportSummary,
+      });
+      answer = chatRes.answer;
+      isFallback = chatRes.isFallback;
+    }
+
+    const userMsg = { role: 'user' as const, text: question, createdAt: new Date() };
+    const modelMsg = { role: 'model' as const, text: answer, createdAt: new Date() };
+
+    session.chat.push(userMsg, modelMsg);
+    await session.save();
+
+    res.status(200).json({
+      answer,
+      isFallback,
+      chat: session.chat,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to process follow-up question' });
   }
 });
 
