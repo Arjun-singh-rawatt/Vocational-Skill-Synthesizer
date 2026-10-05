@@ -1,0 +1,95 @@
+{
+  "language": "English",
+  "detected_level": "B2",
+  "transcript": "Hello everyone, um, today I would like to introduce my background for this interview. You know, I have been working in software development for three years. It has been really exciting, but actually sometimes challenging, like when project deadlines are tight and we need to pivot quickly.",
+  "scores": {
+    "vocabulary": 84,
+    "grammar": 88,
+    "delivery": 79,
+    "clarity": 90,
+    "body_language": 82
+  },
+  "plan": {
+    "summary": "Demonstrates strong B2 professional vocabulary and good clarity. Primary focus is replacing informal filler phrases ('you know', 'like') with structured transition markers and refining sentence flow under pressure.",
+    "focus_areas": [
+      "Minimize filler phrase frequency ('you know', 'actually')",
+      "Elevate professional interview vocabulary (e.g. replace 'really exciting' with 'highly rewarding')",
+      "Maintain confident posture during hesitation periods"
+    ]
+  },
+  "key_details": [
+    {
+      "timestamp": "00:02",
+      "category": "fluency",
+      "observation": "Hesitation with vocalized pause ('um') right after opening greeting.",
+      "suggestion": "Pause silently for 1 second instead of saying 'um' to project confidence.",
+      "better_phrase": "Hello everyone. Today I would like to..."
+    },
+    {
+      "timestamp": "00:08",
+      "category": "vocabulary",
+      "observation": "Used informal filler phrase 'You know' when introducing career duration.",
+      "suggestion": "Replace conversational fillers with direct assertive statements.",
+      "better_phrase": "To give a brief overview, I have been working..."
+    },
+    {
+      "timestamp": "00:15",
+      "category": "vocabulary",
+      "observation": "Word choice 'really exciting' is grammatically correct but basic for a professional setting.",
+      "suggestion": "Use higher-register vocabulary suitable for job interviews.",
+      "better_phrase": "It has been an exceptionally rewarding experience"
+    },
+    {
+      "timestamp": "00:22",
+      "category": "body_language",
+      "observation": "Slight drop in eye contact and micro-nod when discussing tight deadlines.",
+      "suggestion": "Maintain direct camera gaze when addressing challenging topics to show resilience.",
+      "better_phrase": null
+    }
+  ],
+  "actions": [
+    {
+      "title": "Silent Pause Drill",
+      "exercise": "Practice speaking 5 sentences continuously, replacing every urge to say 'um' or 'you know' with a deliberate 1-second silent breath.",
+      "duration_minutes": 10
+    },
+    {
+      "title": "Interview Vocabulary Upgrade",
+      "exercise": "Review 5 professional synonyms for 'exciting' and 'challenging' and use each in a mock interview response.",
+      "duration_minutes": 15
+    }
+  ],
+  "vocabulary_suggestions": [
+    {
+      "word": "Pivot",
+      "meaning": "To quickly change strategic direction or focus in response to new conditions.",
+      "example": "Our team had to pivot quickly when customer requirements changed.",
+      "replaces": "change quickly"
+    },
+    {
+      "word": "Rewarding",
+      "meaning": "Providing satisfaction or worthwhile experience.",
+      "example": "Leading cross-functional projects has been exceptionally rewarding.",
+      "replaces": "really exciting"
+    }
+  ],
+  "idiom_suggestions": [
+    {
+      "idiom": "Hit the ground running",
+      "meaning": "To start a new activity quickly and with great enthusiasm and efficiency.",
+      "example": "I am ready to hit the ground running from day one in this position."
+    },
+    {
+      "idiom": "Think on one's feet",
+      "meaning": "To react quickly and effectively without prior preparation.",
+      "example": "Tight deadlines require engineers to think on their feet."
+    }
+  ],
+  "filler_words_detected": [
+    "um",
+    "you know",
+    "actually",
+    "like"
+  ],
+  "overall_summary": "Overall strong presentation with clear pronunciation and coherent structure. Practicing silent pauses and incorporating higher-level professional phrasing will elevate your delivery to C1 level."
+}
