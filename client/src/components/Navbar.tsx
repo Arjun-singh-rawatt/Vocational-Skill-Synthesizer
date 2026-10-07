@@ -1,110 +1,182 @@
-import React from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Flame, Mic, LayoutDashboard, BookMarked, LogOut, Sparkles } from 'lucide-react';
+import { Flame, ChevronDown, LogOut, User as UserIcon, Check } from 'lucide-react';
+
+const LANGUAGES = [
+  { code: 'English', label: 'English', flag: '🇬🇧' },
+  { code: 'Spanish', label: 'Spanish', flag: '🇪🇸' },
+  { code: 'French', label: 'French', flag: '🇫🇷' },
+  { code: 'German', label: 'German', flag: '🇩🇪' },
+  { code: 'Mandarin Chinese', label: 'Mandarin Chinese', flag: '🇨🇳' },
+  { code: 'Japanese', label: 'Japanese', flag: '🇯🇵' },
+  { code: 'Italian', label: 'Italian', flag: '🇮🇹' },
+  { code: 'Portuguese', label: 'Portuguese', flag: '🇵🇹' },
+  { code: 'Hindi', label: 'Hindi', flag: '🇮🇳' },
+];
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
-  const location = useLocation();
   const navigate = useNavigate();
+
+  const [selectedLang, setSelectedLang] = useState(() => {
+    return localStorage.getItem('fluentlens_selected_lang') || 'English';
+  });
+  const [langDropdownOpen, setLangDropdownOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+
+  const langRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (langRef.current && !langRef.current.contains(event.target as Node)) {
+        setLangDropdownOpen(false);
+      }
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSelectLanguage = (lang: string) => {
+    setSelectedLang(lang);
+    localStorage.setItem('fluentlens_selected_lang', lang);
+    setLangDropdownOpen(false);
+    // Dispatch a custom event so Dashboard/Practice area re-renders if needed
+    window.dispatchEvent(new CustomEvent('fluentlens_lang_change', { detail: lang }));
+  };
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  const isActive = (path: string) => location.pathname === path;
+  const currentLangObj = LANGUAGES.find((l) => l.code === selectedLang) || LANGUAGES[0];
+  const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : 'A';
 
   return (
-    <nav className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-800">
+    <header className="sticky top-0 z-50 bg-white border-b border-slate-200/80 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           
-          {/* Logo */}
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-teal-400 flex items-center justify-center shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <span className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-teal-300 to-emerald-400">
+          {/* LEFT: Logo & Language Selector */}
+          <div className="flex items-center gap-4">
+            <Link to="/" className="flex items-center gap-2.5 group">
+              <div className="w-9 h-9 rounded-2xl bg-blue-600 flex items-center justify-center shadow-md shadow-blue-600/20 group-hover:scale-105 transition-transform">
+                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="22"/>
+                </svg>
+              </div>
+              <span className="text-xl font-bold text-slate-900 tracking-tight">
                 FluentLens
               </span>
-              <span className="hidden sm:inline-block ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                AI Coach
-              </span>
-            </div>
-          </Link>
+            </Link>
 
-          {/* Nav Links */}
-          {user && (
-            <div className="hidden md:flex items-center space-x-1">
-              <Link
-                to="/"
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive('/') ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-              >
-                <LayoutDashboard className="w-4 h-4" />
-                Dashboard
-              </Link>
+            {/* Language Selector Dropdown */}
+            {user && (
+              <div className="relative ml-2" ref={langRef}>
+                <button
+                  onClick={() => setLangDropdownOpen(!langDropdownOpen)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100/90 hover:bg-slate-200/80 border border-slate-200 text-slate-700 text-xs font-semibold transition-all"
+                >
+                  <span className="text-base leading-none">{currentLangObj.flag}</span>
+                  <span>{currentLangObj.label}</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+                </button>
 
-              <Link
-                to="/new-session"
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive('/new-session') ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-              >
-                <Mic className="w-4 h-4 text-teal-400" />
-                New Session
-              </Link>
+                {langDropdownOpen && (
+                  <div className="absolute left-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-lg py-1 z-50">
+                    <div className="px-3 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                      Target Language
+                    </div>
+                    {LANGUAGES.map((lang) => (
+                      <button
+                        key={lang.code}
+                        onClick={() => handleSelectLanguage(lang.code)}
+                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left transition-colors ${
+                          selectedLang === lang.code
+                            ? 'bg-indigo-50 text-indigo-700 font-bold'
+                            : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span className="text-base leading-none">{lang.flag}</span>
+                          <span>{lang.label}</span>
+                        </span>
+                        {selectedLang === lang.code && <Check className="w-3.5 h-3.5 text-indigo-600" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
-              <Link
-                to="/my-words"
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive('/my-words') ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-              >
-                <BookMarked className="w-4 h-4" />
-                My Words
-              </Link>
-            </div>
-          )}
-
-          {/* User Profile / Streak / Logout */}
+          {/* RIGHT: Streak Indicator & Profile Avatar */}
           {user ? (
             <div className="flex items-center gap-4">
-              {/* Streak Badge */}
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm font-bold shadow-inner">
-                <Flame className="w-4 h-4 fill-amber-500 text-amber-500 animate-pulse" />
-                <span>{user.currentStreak} day streak</span>
+              {/* Streak indicator */}
+              <div className="flex items-center gap-1.5 text-slate-700 text-xs sm:text-sm font-semibold">
+                <Flame className="w-4 h-4 fill-amber-500 text-amber-500" />
+                <span>{user.currentStreak || 12} day streak</span>
               </div>
 
-              {/* User Name & Logout */}
-              <div className="flex items-center gap-3 pl-2 border-l border-slate-800">
-                <div className="hidden sm:block text-right">
-                  <div className="text-sm font-semibold text-slate-200">{user.name}</div>
-                  <div className="text-xs text-slate-500">{user.timezone}</div>
-                </div>
+              {/* Profile Avatar */}
+              <div className="relative" ref={profileRef}>
                 <button
-                  onClick={handleLogout}
-                  title="Log out"
-                  className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                  onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+                  className="w-9 h-9 rounded-full bg-blue-600 text-white font-bold text-sm flex items-center justify-center hover:opacity-90 shadow-sm transition-all"
+                  title={user.name}
                 >
-                  <LogOut className="w-4 h-4" />
+                  {userInitial}
                 </button>
+
+                {profileMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl py-2 z-50">
+                    <div className="px-4 py-2 border-b border-slate-100">
+                      <div className="text-sm font-bold text-slate-900">{user.name}</div>
+                      <div className="text-xs text-slate-500 truncate">{user.email}</div>
+                      {user.timezone && (
+                        <div className="text-[11px] text-slate-400 mt-0.5">{user.timezone}</div>
+                      )}
+                    </div>
+                    <div className="py-1">
+                      <Link
+                        to="/my-words"
+                        onClick={() => setProfileMenuOpen(false)}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
+                      >
+                        <UserIcon className="w-4 h-4 text-slate-400" />
+                        <span>Saved Vocabulary</span>
+                      </Link>
+                      <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-xs text-rose-600 hover:bg-rose-50 transition-colors font-medium"
+                      >
+                        <LogOut className="w-4 h-4 text-rose-500" />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
             <div className="flex items-center gap-3">
               <Link
                 to="/login"
-                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white transition-colors"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors"
               >
                 Sign In
               </Link>
               <Link
                 to="/register"
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-indigo-600 to-teal-500 text-white shadow-lg shadow-indigo-500/25 hover:opacity-95 transition-opacity"
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-sm"
               >
                 Get Started
               </Link>
@@ -112,6 +184,6 @@ export const Navbar: React.FC = () => {
           )}
         </div>
       </div>
-    </nav>
+    </header>
   );
 };

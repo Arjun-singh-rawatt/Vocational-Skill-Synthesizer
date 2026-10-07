@@ -44,28 +44,28 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 bg-radial from-indigo-950/40 via-slate-950 to-slate-950">
+    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 bg-[#f4f6fa]">
       <div className="w-full max-w-md">
         
         {/* Header Icon */}
         <div className="text-center mb-8">
-          <div className="inline-flex p-3 rounded-2xl bg-gradient-to-tr from-indigo-600 to-teal-400 text-white shadow-xl shadow-indigo-500/20 mb-4">
-            <Sparkles className="w-8 h-8" />
+          <div className="inline-flex p-3 rounded-2xl bg-blue-600 text-white shadow-md shadow-blue-600/20 mb-4">
+            <Sparkles className="w-7 h-7" />
           </div>
-          <h1 className="text-3xl font-extrabold text-white">
+          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
             {isRegister ? 'Create Your Account' : 'Welcome Back'}
           </h1>
-          <p className="mt-2 text-sm text-slate-400">
+          <p className="mt-2 text-xs text-slate-500 max-w-xs mx-auto">
             {isRegister
               ? 'Start mastering spoken languages with instant AI delivery coaching'
-              : 'Sign in to access your fluency analytics and practice history'}
+              : 'Sign in to access your fluency workspace and practice history'}
           </p>
         </div>
 
         {/* Card */}
-        <div className="glass-panel p-8 rounded-2xl border border-slate-800 shadow-2xl">
+        <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-md">
           {error && (
-            <div className="mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm">
+            <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
               {error}
             </div>
           )}
@@ -73,46 +73,46 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
           <form onSubmit={handleSubmit} className="space-y-4">
             {isRegister && (
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
                   Full Name
                 </label>
                 <div className="relative">
-                  <User className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
+                  <User className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
                   <input
                     type="text"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Alex Morgan"
-                    className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-all"
                   />
                 </div>
               </div>
             )}
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
                 Email Address
               </label>
               <div className="relative">
-                <Mail className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
+                <Mail className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="alex@example.com"
-                  className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-all"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
                 Password
               </label>
               <div className="relative">
-                <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
+                <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
                 <input
                   type="password"
                   required
@@ -120,24 +120,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-all"
                 />
               </div>
             </div>
 
             {isRegister && (
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
                   Detected Timezone
                 </label>
                 <div className="relative">
-                  <Globe className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
+                  <Globe className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
                   <input
                     type="text"
                     required
                     value={timezone}
                     onChange={(e) => setTimezone(e.target.value)}
-                    className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-indigo-500 transition-all"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
                   />
                 </div>
               </div>
@@ -146,10 +146,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full mt-2 py-3 px-4 bg-gradient-to-r from-indigo-600 via-indigo-500 to-teal-400 hover:opacity-95 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+              className="w-full mt-2 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-600/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
             >
               {loading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
                 <>
                   <span>{isRegister ? 'Create Account' : 'Sign In'}</span>
@@ -160,18 +160,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
           </form>
 
           {/* Toggle link */}
-          <div className="mt-6 text-center text-sm text-slate-400">
+          <div className="mt-6 text-center text-xs text-slate-500">
             {isRegister ? (
               <span>
                 Already have an account?{' '}
-                <Link to="/login" className="text-indigo-400 font-medium hover:underline">
+                <Link to="/login" className="text-blue-600 font-semibold hover:underline">
                   Sign In
                 </Link>
               </span>
             ) : (
               <span>
                 Don't have an account?{' '}
-                <Link to="/register" className="text-teal-400 font-medium hover:underline">
+                <Link to="/register" className="text-blue-600 font-semibold hover:underline">
                   Create one now
                 </Link>
               </span>

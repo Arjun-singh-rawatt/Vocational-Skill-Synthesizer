@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
-import { sessionRateLimiter } from '../app';
+import { sessionRateLimiter } from '../middleware/rateLimiter';
 import { Session } from '../models/Session';
 import { User } from '../models/User';
 import { env } from '../config/env';

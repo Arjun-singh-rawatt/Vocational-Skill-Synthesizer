@@ -54,14 +54,8 @@ app.use('/api/vocab', vocabRouter);
 import progressRouter from './routes/progress';
 app.use('/api/progress', progressRouter);
 
-// Rate limiter for session creation and ask endpoints (30 requests per 15 mins)
-export const sessionRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 30,
-  message: { error: 'Too many session requests from this IP, please try again after 15 minutes.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+import { sessionRateLimiter } from './middleware/rateLimiter';
+export { sessionRateLimiter };
 
 // Global error handler
 app.use(errorHandler);

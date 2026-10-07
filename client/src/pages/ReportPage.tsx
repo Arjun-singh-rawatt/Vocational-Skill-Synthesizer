@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
+import { useParams, useLocation, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import {
   Award,
@@ -17,6 +17,7 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronUp,
+  ArrowLeft,
 } from 'lucide-react';
 
 export const ReportPage: React.FC = () => {
@@ -112,18 +113,22 @@ export const ReportPage: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-12 h-12 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mb-4" />
-        <p className="text-slate-400 text-sm">Loading your coaching report...</p>
+        <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4" />
+        <p className="text-slate-500 text-sm">Loading your coaching report...</p>
       </div>
     );
   }
 
   if (error || !session || !session.report) {
     return (
-      <div className="max-w-2xl mx-auto my-12 p-8 glass-panel rounded-2xl border border-slate-800 text-center">
-        <AlertCircle className="w-12 h-12 text-rose-400 mx-auto mb-4" />
-        <h2 className="text-xl font-bold text-white">Report Unavailable</h2>
-        <p className="text-sm text-slate-400 mt-2">{error || 'Session report could not be found.'}</p>
+      <div className="max-w-2xl mx-auto my-12 p-8 bg-white rounded-3xl border border-slate-200 text-center shadow-sm">
+        <AlertCircle className="w-12 h-12 text-rose-500 mx-auto mb-4" />
+        <h2 className="text-xl font-bold text-slate-900">Report Unavailable</h2>
+        <p className="text-sm text-slate-500 mt-2">{error || 'Session report could not be found.'}</p>
+        <Link to="/" className="inline-flex items-center gap-2 mt-6 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold">
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Workspace</span>
+        </Link>
       </div>
     );
   }
@@ -145,7 +150,7 @@ export const ReportPage: React.FC = () => {
       const isFiller = fillers.some((f: string) => f.toLowerCase() === part.toLowerCase());
       if (isFiller) {
         return (
-          <mark key={idx} className="bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 py-0.5 rounded text-xs font-semibold mx-0.5">
+          <mark key={idx} className="bg-amber-100 text-amber-900 border border-amber-300 px-1 py-0.5 rounded text-xs font-semibold mx-0.5">
             {part}
           </mark>
         );
@@ -157,42 +162,50 @@ export const ReportPage: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
       
+      {/* Top Back Nav */}
+      <div>
+        <Link to="/" className="inline-flex items-center gap-2 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl transition-colors">
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Home Workspace</span>
+        </Link>
+      </div>
+
       {/* Header Banner */}
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-indigo-400 uppercase tracking-wider mb-1">
+          <div className="flex items-center gap-2 text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">
             <Sparkles className="w-4 h-4" />
             <span>AI Spoken-Language Coach Report</span>
           </div>
-          <h1 className="text-2xl font-extrabold text-white">
+          <h1 className="text-2xl font-extrabold text-slate-900">
             {session.language} Practice — {session.goal.toUpperCase()}
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 mt-1">
             Recorded on {new Date(session.createdAt).toLocaleDateString()} &bull; Duration: {session.durationSec}s
           </p>
         </div>
 
         {/* Level Badge */}
-        <div className="flex items-center gap-3 bg-gradient-to-r from-indigo-900/40 to-teal-900/40 border border-indigo-500/30 px-5 py-3 rounded-2xl">
-          <Award className="w-8 h-8 text-teal-400" />
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 px-5 py-3 rounded-2xl shrink-0">
+          <Award className="w-8 h-8 text-blue-600" />
           <div>
-            <div className="text-xs text-slate-400 font-semibold uppercase">CEFR Level</div>
-            <div className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-teal-300 to-indigo-300">
+            <div className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">CEFR Level</div>
+            <div className="text-2xl font-black text-blue-700">
               {report.detected_level}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Local Video/Audio Preview Player (if recorded locally) */}
+      {/* Local Video/Audio Preview Player */}
       {localPreviewUrl && (
-        <div className="glass-panel p-4 rounded-2xl border border-slate-800">
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 mb-3">
-            <PlayCircle className="w-4 h-4 text-indigo-400" />
+        <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm">
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-3">
+            <PlayCircle className="w-4 h-4 text-blue-600" />
             <span>Local Clip Preview (Click timestamps in Key Details to seek)</span>
           </div>
           {session.mediaType === 'video' ? (
-            <video ref={mediaRef as any} src={localPreviewUrl} controls className="w-full max-h-[400px] rounded-xl bg-black" />
+            <video ref={mediaRef as any} src={localPreviewUrl} controls className="w-full max-h-[400px] rounded-2xl bg-black" />
           ) : (
             <audio ref={mediaRef as any} src={localPreviewUrl} controls className="w-full" />
           )}
@@ -203,17 +216,17 @@ export const ReportPage: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         
         {/* Fluency Index Card */}
-        <div className="glass-card p-5 rounded-2xl border border-slate-800 relative overflow-hidden">
+        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Fluency Index</span>
-            <Zap className="w-5 h-5 text-amber-400" />
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Fluency Index</span>
+            <Zap className="w-5 h-5 text-amber-500" />
           </div>
-          <div className="text-3xl font-black text-white">{fluency.index || 0} / 100</div>
-          <p className="text-xs text-slate-400 mt-1">Deterministic pace, pause & filler score</p>
+          <div className="text-3xl font-black text-slate-900">{fluency.index || 0} / 100</div>
+          <p className="text-[11px] text-slate-500 mt-1">Deterministic pace, pause & filler score</p>
 
           <button
             onClick={() => setShowFluencyBreakdown(!showFluencyBreakdown)}
-            className="mt-3 flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 font-medium"
+            className="mt-3 flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-semibold"
           >
             <span>{showFluencyBreakdown ? 'Hide Breakdown' : 'View Breakdown'}</span>
             {showFluencyBreakdown ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -221,78 +234,78 @@ export const ReportPage: React.FC = () => {
         </div>
 
         {/* Gemini Delivery Score */}
-        <div className="glass-card p-5 rounded-2xl border border-slate-800">
+        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Delivery</span>
-            <TrendingUp className="w-5 h-5 text-teal-400" />
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Delivery</span>
+            <TrendingUp className="w-5 h-5 text-blue-600" />
           </div>
-          <div className="text-3xl font-black text-teal-300">{scores.delivery || 0}%</div>
-          <div className="w-full bg-slate-800 h-2 rounded-full mt-3 overflow-hidden">
-            <div className="bg-teal-500 h-full transition-all" style={{ width: `${scores.delivery || 0}%` }} />
+          <div className="text-3xl font-black text-blue-600">{scores.delivery || 0}%</div>
+          <div className="w-full bg-slate-100 h-2 rounded-full mt-3 overflow-hidden">
+            <div className="bg-blue-600 h-full transition-all" style={{ width: `${scores.delivery || 0}%` }} />
           </div>
         </div>
 
         {/* Vocabulary Score */}
-        <div className="glass-card p-5 rounded-2xl border border-slate-800">
+        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Vocabulary</span>
-            <BookOpen className="w-5 h-5 text-indigo-400" />
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Vocabulary</span>
+            <BookOpen className="w-5 h-5 text-indigo-600" />
           </div>
-          <div className="text-3xl font-black text-indigo-300">{scores.vocabulary || 0}%</div>
-          <div className="w-full bg-slate-800 h-2 rounded-full mt-3 overflow-hidden">
-            <div className="bg-indigo-500 h-full transition-all" style={{ width: `${scores.vocabulary || 0}%` }} />
+          <div className="text-3xl font-black text-indigo-600">{scores.vocabulary || 0}%</div>
+          <div className="w-full bg-slate-100 h-2 rounded-full mt-3 overflow-hidden">
+            <div className="bg-indigo-600 h-full transition-all" style={{ width: `${scores.vocabulary || 0}%` }} />
           </div>
         </div>
 
         {/* Clarity Score */}
-        <div className="glass-card p-5 rounded-2xl border border-slate-800">
+        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Clarity</span>
-            <Sparkles className="w-5 h-5 text-emerald-400" />
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Clarity</span>
+            <Sparkles className="w-5 h-5 text-emerald-600" />
           </div>
-          <div className="text-3xl font-black text-emerald-300">{scores.clarity || 0}%</div>
-          <div className="w-full bg-slate-800 h-2 rounded-full mt-3 overflow-hidden">
-            <div className="bg-emerald-500 h-full transition-all" style={{ width: `${scores.clarity || 0}%` }} />
+          <div className="text-3xl font-black text-emerald-600">{scores.clarity || 0}%</div>
+          <div className="w-full bg-slate-100 h-2 rounded-full mt-3 overflow-hidden">
+            <div className="bg-emerald-600 h-full transition-all" style={{ width: `${scores.clarity || 0}%` }} />
           </div>
         </div>
       </div>
 
       {/* Expandable Fluency Breakdown Drawer */}
       {showFluencyBreakdown && (
-        <div className="glass-panel p-6 rounded-2xl border border-amber-500/20 bg-amber-950/10 grid grid-cols-1 sm:grid-cols-3 gap-6 animate-fadeIn">
+        <div className="bg-amber-50/60 p-6 rounded-3xl border border-amber-200 grid grid-cols-1 sm:grid-cols-3 gap-6">
           <div>
-            <div className="text-xs text-slate-400 uppercase font-semibold">Speaking Speed</div>
-            <div className="text-xl font-bold text-white mt-1">{fluency.wpm || 0} WPM</div>
-            <div className="text-xs text-slate-400 mt-1">Pace Score: {fluency.paceScore || 0}/100</div>
+            <div className="text-xs text-amber-900 uppercase font-bold">Speaking Speed</div>
+            <div className="text-xl font-extrabold text-slate-900 mt-1">{fluency.wpm || 0} WPM</div>
+            <div className="text-xs text-slate-600 mt-1">Pace Score: {fluency.paceScore || 0}/100</div>
           </div>
           <div>
-            <div className="text-xs text-slate-400 uppercase font-semibold">Silence / Pause Ratio</div>
-            <div className="text-xl font-bold text-white mt-1">{((fluency.pauseRatio || 0) * 100).toFixed(1)}%</div>
-            <div className="text-xs text-slate-400 mt-1">Pause Score: {fluency.pauseScore || 0}/100</div>
+            <div className="text-xs text-amber-900 uppercase font-bold">Silence / Pause Ratio</div>
+            <div className="text-xl font-extrabold text-slate-900 mt-1">{((fluency.pauseRatio || 0) * 100).toFixed(1)}%</div>
+            <div className="text-xs text-slate-600 mt-1">Pause Score: {fluency.pauseScore || 0}/100</div>
           </div>
           <div>
-            <div className="text-xs text-slate-400 uppercase font-semibold">Fillers per 100 Words</div>
-            <div className="text-xl font-bold text-white mt-1">{fluency.fillersPer100 || 0}</div>
-            <div className="text-xs text-slate-400 mt-1">Filler Score: {fluency.fillerScore || 0}/100</div>
+            <div className="text-xs text-amber-900 uppercase font-bold">Fillers per 100 Words</div>
+            <div className="text-xl font-extrabold text-slate-900 mt-1">{fluency.fillersPer100 || 0}</div>
+            <div className="text-xs text-slate-600 mt-1">Filler Score: {fluency.fillerScore || 0}/100</div>
           </div>
         </div>
       )}
 
       {/* Plan Section */}
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800">
-        <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold uppercase tracking-wider mb-2">
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+        <div className="flex items-center gap-2 text-blue-600 text-xs font-bold uppercase tracking-wider mb-2">
           <Lightbulb className="w-4 h-4" />
           <span>Personalized Coaching Plan</span>
         </div>
-        <p className="text-slate-200 text-sm font-medium leading-relaxed">{report.plan?.summary}</p>
+        <p className="text-slate-800 text-sm font-medium leading-relaxed">{report.plan?.summary}</p>
 
         {report.plan?.focus_areas && report.plan.focus_areas.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-slate-800/80">
-            <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Focus Areas</h4>
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Focus Areas</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {report.plan.focus_areas.map((area: string, idx: number) => (
-                <div key={idx} className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300">
-                  <CheckCircle className="w-4 h-4 text-teal-400 shrink-0" />
+                <div key={idx} className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-800 font-medium">
+                  <CheckCircle className="w-4 h-4 text-blue-600 shrink-0" />
                   <span>{area}</span>
                 </div>
               ))}
@@ -302,37 +315,36 @@ export const ReportPage: React.FC = () => {
       </div>
 
       {/* Key Details Timeline */}
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800">
-        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-          <Clock className="w-5 h-5 text-teal-400" />
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+        <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+          <Clock className="w-5 h-5 text-blue-600" />
           Key Details & Timestamped Observations
         </h3>
 
         <div className="space-y-4">
           {report.key_details?.map((detail: any, idx: number) => (
-            <div key={idx} className="p-4 rounded-xl bg-slate-900/70 border border-slate-800/80 space-y-2 hover:border-slate-700 transition-all">
+            <div key={idx} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 hover:border-blue-200 transition-all">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleSeekToTimestamp(detail.timestamp)}
-                    className="px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/30 text-indigo-300 text-xs font-mono font-bold flex items-center gap-1 transition-all"
+                    className="px-2.5 py-1 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-mono font-bold flex items-center gap-1 transition-all"
                   >
                     <PlayCircle className="w-3.5 h-3.5" />
                     {detail.timestamp}
                   </button>
-                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 uppercase border border-slate-700">
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-700 uppercase">
                     {detail.category}
                   </span>
                 </div>
 
-                {/* Save Word button for vocabulary items */}
                 {detail.category === 'vocabulary' && detail.better_phrase && (
                   <button
                     onClick={() => handleSaveWord(detail.better_phrase, detail.suggestion, `Observed at ${detail.timestamp}`)}
-                    className={`text-xs px-2.5 py-1 rounded-lg border font-medium flex items-center gap-1 transition-all ${
+                    className={`text-xs px-2.5 py-1 rounded-lg border font-semibold flex items-center gap-1 transition-all ${
                       savedWordsMap[detail.better_phrase.toLowerCase()]
-                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                        : 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border-indigo-500/20'
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                        : 'bg-white hover:bg-blue-50 text-blue-700 border-blue-200'
                     }`}
                   >
                     <Bookmark className="w-3.5 h-3.5" />
@@ -341,14 +353,14 @@ export const ReportPage: React.FC = () => {
                 )}
               </div>
 
-              <p className="text-sm text-slate-200">{detail.observation}</p>
-              <p className="text-xs text-slate-400">
-                <span className="font-semibold text-slate-300">Suggestion:</span> {detail.suggestion}
+              <p className="text-xs sm:text-sm text-slate-800 font-medium">{detail.observation}</p>
+              <p className="text-xs text-slate-600">
+                <span className="font-bold text-slate-800">Suggestion:</span> {detail.suggestion}
               </p>
 
               {detail.better_phrase && (
-                <div className="p-2.5 rounded-lg bg-teal-950/30 border border-teal-500/20 text-xs text-teal-300">
-                  <span className="font-semibold text-teal-400">Better phrase:</span> "{detail.better_phrase}"
+                <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900 font-medium">
+                  <span className="font-bold text-blue-700">Better phrase:</span> "{detail.better_phrase}"
                 </div>
               )}
             </div>
@@ -357,18 +369,18 @@ export const ReportPage: React.FC = () => {
       </div>
 
       {/* Actions Checklist */}
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800">
-        <h3 className="text-lg font-bold text-white mb-4">Recommended Exercises & Actions</h3>
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+        <h3 className="text-lg font-bold text-slate-900 mb-4">Recommended Exercises & Actions</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {report.actions?.map((act: any, idx: number) => (
-            <div key={idx} className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+            <div key={idx} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-bold text-white">{act.title}</h4>
-                <span className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                <h4 className="text-sm font-bold text-slate-900">{act.title}</h4>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-medium">
                   {act.duration_minutes} mins
                 </span>
               </div>
-              <p className="text-xs text-slate-400 leading-relaxed">{act.exercise}</p>
+              <p className="text-xs text-slate-600 leading-relaxed">{act.exercise}</p>
             </div>
           ))}
         </div>
@@ -378,25 +390,25 @@ export const ReportPage: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         
         {/* Vocab Suggestions */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-md font-bold text-white mb-4 flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-indigo-400" />
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+          <h3 className="text-md font-bold text-slate-900 mb-4 flex items-center gap-2">
+            <BookOpen className="w-4 h-4 text-blue-600" />
             Suggested Vocabulary
           </h3>
           <div className="space-y-3">
             {report.vocabulary_suggestions?.map((item: any, idx: number) => (
-              <div key={idx} className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-start justify-between gap-3">
+              <div key={idx} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-sm font-bold text-indigo-300">{item.word}</div>
-                  <div className="text-xs text-slate-300 mt-0.5">{item.meaning}</div>
-                  <div className="text-xs text-slate-400 italic mt-1">"{item.example}"</div>
+                  <div className="text-sm font-bold text-indigo-900">{item.word}</div>
+                  <div className="text-xs text-slate-700 font-medium mt-0.5">{item.meaning}</div>
+                  <div className="text-xs text-slate-500 italic mt-1">"{item.example}"</div>
                 </div>
                 <button
                   onClick={() => handleSaveWord(item.word, item.meaning, item.example)}
-                  className={`text-xs p-2 rounded-lg border transition-all ${
+                  className={`text-xs p-2 rounded-xl border transition-all ${
                     savedWordsMap[item.word.toLowerCase()]
-                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                      : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
                   }`}
                 >
                   <Bookmark className="w-3.5 h-3.5" />
@@ -407,17 +419,17 @@ export const ReportPage: React.FC = () => {
         </div>
 
         {/* Idiom Suggestions */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800">
-          <h3 className="text-md font-bold text-white mb-4 flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-teal-400" />
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+          <h3 className="text-md font-bold text-slate-900 mb-4 flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-blue-600" />
             Native Idiom Suggestions
           </h3>
           <div className="space-y-3">
             {report.idiom_suggestions?.map((item: any, idx: number) => (
-              <div key={idx} className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800">
-                <div className="text-sm font-bold text-teal-300">{item.idiom}</div>
-                <div className="text-xs text-slate-300 mt-0.5">{item.meaning}</div>
-                <div className="text-xs text-slate-400 italic mt-1">"{item.example}"</div>
+              <div key={idx} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+                <div className="text-sm font-bold text-blue-900">{item.idiom}</div>
+                <div className="text-xs text-slate-700 font-medium mt-0.5">{item.meaning}</div>
+                <div className="text-xs text-slate-500 italic mt-1">"{item.example}"</div>
               </div>
             ))}
           </div>
@@ -426,23 +438,23 @@ export const ReportPage: React.FC = () => {
       </div>
 
       {/* Transcript with Filler Highlights */}
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800">
-        <h3 className="text-lg font-bold text-white mb-2">Verbatim Transcript</h3>
-        <p className="text-xs text-slate-400 mb-4">
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+        <h3 className="text-lg font-bold text-slate-900 mb-2">Verbatim Transcript</h3>
+        <p className="text-xs text-slate-500 mb-4">
           Filler words detected: {report.filler_words_detected?.length ? report.filler_words_detected.join(', ') : 'None'}
         </p>
-        <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-300 leading-relaxed font-mono">
+        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs sm:text-sm text-slate-800 leading-relaxed font-mono">
           {renderHighlightedTranscript()}
         </div>
       </div>
 
       {/* Follow-Up Chat Box */}
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
         <div className="flex items-center gap-2">
-          <MessageSquare className="w-5 h-5 text-indigo-400" />
-          <h3 className="text-lg font-bold text-white">Ask Follow-Up Questions</h3>
+          <MessageSquare className="w-5 h-5 text-blue-600" />
+          <h3 className="text-lg font-bold text-slate-900">Ask Follow-Up Questions</h3>
         </div>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-slate-500">
           Ask Gemini specific questions about your recording (e.g. "How was my intonation at 00:08?").
         </p>
 
@@ -456,7 +468,7 @@ export const ReportPage: React.FC = () => {
             <button
               key={idx}
               onClick={() => handleSendChat(q)}
-              className="text-xs px-3 py-1.5 rounded-full bg-slate-800/80 hover:bg-indigo-600/30 border border-slate-700 text-slate-300 hover:text-indigo-200 transition-all"
+              className="text-xs px-3 py-1.5 rounded-full bg-slate-100 hover:bg-blue-50 border border-slate-200 text-slate-700 hover:text-blue-700 font-medium transition-all"
             >
               "{q}"
             </button>
@@ -468,13 +480,13 @@ export const ReportPage: React.FC = () => {
           {chatList.map((msg: any, idx: number) => (
             <div
               key={idx}
-              className={`p-3.5 rounded-xl text-sm max-w-[85%] ${
+              className={`p-3.5 rounded-2xl text-xs sm:text-sm max-w-[85%] ${
                 msg.role === 'user'
-                  ? 'ml-auto bg-indigo-600 text-white rounded-br-none'
-                  : 'mr-auto bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none'
+                  ? 'ml-auto bg-blue-600 text-white rounded-br-none'
+                  : 'mr-auto bg-slate-100 border border-slate-200 text-slate-800 rounded-bl-none'
               }`}
             >
-              <div className="text-[10px] opacity-70 mb-1 font-semibold">{msg.role === 'user' ? 'You' : 'Coach Gemini'}</div>
+              <div className="text-[10px] opacity-70 mb-1 font-bold">{msg.role === 'user' ? 'You' : 'Coach Gemini'}</div>
               <div className="whitespace-pre-wrap leading-relaxed">{msg.text}</div>
             </div>
           ))}
@@ -488,12 +500,12 @@ export const ReportPage: React.FC = () => {
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSendChat()}
             placeholder="Ask a question about this recording..."
-            className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-all"
+            className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-all"
           />
           <button
             onClick={() => handleSendChat()}
             disabled={asking || !question.trim()}
-            className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition-all disabled:opacity-50"
+            className="p-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-all disabled:opacity-50"
           >
             {asking ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send className="w-4 h-4" />}
           </button>

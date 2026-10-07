@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import {
   Video,
@@ -12,7 +12,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Play,
-  Film,
+  ArrowLeft,
 } from 'lucide-react';
 
 const COMMON_LANGUAGES = [
@@ -53,7 +53,7 @@ const SPEAKING_PROMPTS: Record<string, string[]> = {
 export const NewSessionPage: React.FC = () => {
   const navigate = useNavigate();
 
-  const [language, setLanguage] = useState('English');
+  const [language, setLanguage] = useState(() => localStorage.getItem('fluentlens_selected_lang') || 'English');
   const [goal, setGoal] = useState<'conversation' | 'interview' | 'ielts' | 'presentation'>('interview');
   const [promptIndex, setPromptIndex] = useState(0);
 
@@ -82,7 +82,6 @@ export const NewSessionPage: React.FC = () => {
     setPromptIndex((prev) => prev + 1);
   };
 
-  // Clean up media streams on unmount
   useEffect(() => {
     return () => {
       stopMediaStream();
@@ -139,14 +138,12 @@ export const NewSessionPage: React.FC = () => {
         stopMediaStream();
       };
 
-      mediaRecorder.start(1000); // collect data every second
+      mediaRecorder.start(1000);
       setIsRecording(true);
 
-      // Start timer
       timerRef.current = setInterval(() => {
         setRecordingSeconds((prev) => {
           if (prev >= 179) {
-            // 3-minute auto stop (180 seconds)
             stopRecording();
             return 180;
           }
@@ -154,9 +151,8 @@ export const NewSessionPage: React.FC = () => {
         });
       }, 1000);
     } catch (err: any) {
-      console.error('Microphone/Camera permission error:', err);
       setPermissionError(
-        `Unable to access your ${mediaType === 'video' ? 'camera or microphone' : 'microphone'}. Please allow browser permissions in your address bar or upload a clip instead.`
+        `Unable to access your ${mediaType === 'video' ? 'camera or microphone' : 'microphone'}. Please check browser permissions.`
       );
     }
   };
@@ -199,8 +195,7 @@ export const NewSessionPage: React.FC = () => {
       if (useDemo) {
         formData.append('isDemo', 'true');
       } else if (recordedBlob) {
-        const filename = mediaType === 'video' ? 'recording.webm' : 'recording.webm';
-        formData.append('file', recordedBlob, filename);
+        formData.append('file', recordedBlob, 'recording.webm');
       } else if (uploadedFile) {
         formData.append('file', uploadedFile);
       }
@@ -208,18 +203,14 @@ export const NewSessionPage: React.FC = () => {
       const createRes = await api.sessions.create(formData);
       const sessionId = createRes.id;
 
-      // Poll session status every 3 seconds
-      setPollingStep('Analyzing delivery & pause patterns...');
+      setPollingStep('Evaluating fluency, pause ratio & clarity...');
 
       const pollInterval = setInterval(async () => {
         try {
           const session = await api.sessions.get(sessionId);
-          if (session.status === 'processing') {
-            setPollingStep('Evaluating vocabulary, clarity & coach feedback...');
-          } else if (session.status === 'done') {
+          if (session.status === 'done') {
             clearInterval(pollInterval);
             setIsSubmitting(false);
-            // Navigate to report with local blob URL state if available
             navigate(`/sessions/${sessionId}`, { state: { previewUrl } });
           } else if (session.status === 'failed') {
             clearInterval(pollInterval);
@@ -239,22 +230,31 @@ export const NewSessionPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+      
+      {/* Top Back Nav */}
+      <div>
+        <Link to="/" className="inline-flex items-center gap-2 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl transition-colors">
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Home Workspace</span>
+        </Link>
+      </div>
+
       {/* Page Header */}
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-extrabold text-white">Start New Practice Session</h1>
-        <p className="mt-2 text-slate-400 text-sm max-w-xl mx-auto">
-          Record a 1-3 minute clip speaking in ANY language. Get instant AI coaching on clarity, vocabulary, pause ratio & body language.
+      <div className="text-center mb-6">
+        <h1 className="text-3xl font-extrabold text-slate-900">Start New Practice Session</h1>
+        <p className="mt-1.5 text-slate-500 text-xs sm:text-sm max-w-xl mx-auto">
+          Record a 1-3 minute clip speaking in ANY language. Get instant AI coaching on clarity, vocabulary, pause ratio & delivery.
         </p>
       </div>
 
       {/* Main Card */}
-      <div className="glass-panel p-6 sm:p-8 rounded-2xl border border-slate-800 space-y-8">
+      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
         
-        {/* Step 1: Target Language & Goal Selection */}
+        {/* Language & Goal Selection */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
               Speaking Language
             </label>
             <input
@@ -262,9 +262,8 @@ export const NewSessionPage: React.FC = () => {
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
               placeholder="e.g. English, Spanish, French..."
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-all"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition-all font-medium"
             />
-            {/* Suggestions */}
             <div className="flex flex-wrap gap-1.5 mt-2">
               {COMMON_LANGUAGES.map((lang) => (
                 <button
@@ -273,8 +272,8 @@ export const NewSessionPage: React.FC = () => {
                   onClick={() => setLanguage(lang)}
                   className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                     language === lang
-                      ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300'
-                      : 'bg-slate-800/60 border-slate-700/60 text-slate-400 hover:text-white'
+                      ? 'bg-blue-50 border-blue-300 text-blue-700 font-semibold'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                   }`}
                 >
                   {lang}
@@ -284,7 +283,7 @@ export const NewSessionPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
               Learning Goal
             </label>
             <select
@@ -293,7 +292,7 @@ export const NewSessionPage: React.FC = () => {
                 setGoal(e.target.value);
                 setPromptIndex(0);
               }}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition-all cursor-pointer font-medium"
             >
               <option value="interview">Job Interview Practice</option>
               <option value="conversation">Casual Conversation</option>
@@ -303,40 +302,40 @@ export const NewSessionPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Step 2: Practice Prompt Card */}
-        <div className="p-5 rounded-2xl bg-indigo-950/40 border border-indigo-500/20 relative overflow-hidden">
+        {/* Prompt Card */}
+        <div className="p-5 rounded-2xl bg-blue-50/70 border border-blue-200 relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold uppercase tracking-wider">
+            <div className="flex items-center gap-2 text-blue-700 text-xs font-bold uppercase tracking-wider">
               <Sparkles className="w-4 h-4" />
               <span>Suggested Speaking Prompt</span>
             </div>
             <button
               onClick={handleShufflePrompt}
-              className="flex items-center gap-1.5 text-xs text-indigo-300 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 px-3 py-1 rounded-lg border border-indigo-500/20 transition-all"
+              className="flex items-center gap-1.5 text-xs text-blue-700 hover:text-blue-800 bg-white px-3 py-1 rounded-lg border border-blue-200 transition-all font-semibold shadow-2xs"
             >
               <Shuffle className="w-3.5 h-3.5" />
               <span>New Prompt</span>
             </button>
           </div>
-          <p className="text-slate-200 text-base font-medium italic">
+          <p className="text-slate-800 text-sm font-medium italic">
             "{currentPrompt}"
           </p>
         </div>
 
-        {/* Step 3: Recording Mode Selection & Permissions Warning */}
+        {/* Recording Mode & Box */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
               Recording Input Mode
             </label>
-            <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800">
+            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
               <button
                 onClick={() => {
                   resetRecording();
                   setMediaType('video');
                 }}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  mediaType === 'video' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                  mediaType === 'video' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
                 }`}
               >
                 <Video className="w-3.5 h-3.5" />
@@ -348,7 +347,7 @@ export const NewSessionPage: React.FC = () => {
                   setMediaType('audio');
                 }}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  mediaType === 'audio' ? 'bg-teal-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                  mediaType === 'audio' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
                 }`}
               >
                 <Mic className="w-3.5 h-3.5" />
@@ -358,16 +357,15 @@ export const NewSessionPage: React.FC = () => {
           </div>
 
           {permissionError && (
-            <div className="mb-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-sm flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div className="mb-4 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
               <div>{permissionError}</div>
             </div>
           )}
 
-          {/* Recorder & Preview Box */}
-          <div className="relative bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden min-h-[260px] flex flex-col items-center justify-center p-6 text-center">
+          {/* Recorder Box */}
+          <div className="relative bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden min-h-[260px] flex flex-col items-center justify-center p-6 text-center">
             
-            {/* Live Camera Stream */}
             {isRecording && mediaType === 'video' && (
               <video
                 ref={videoPreviewRef}
@@ -378,13 +376,12 @@ export const NewSessionPage: React.FC = () => {
               />
             )}
 
-            {/* Recorded Video / Audio Preview */}
             {!isRecording && previewUrl && (
               mediaType === 'video' ? (
                 <video src={previewUrl} controls className="w-full max-h-[360px] rounded-xl object-contain bg-black" />
               ) : (
-                <div className="w-full max-w-md p-6 rounded-2xl bg-slate-900/80 border border-slate-800 flex flex-col items-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-teal-500/20 text-teal-400 flex items-center justify-center">
+                <div className="w-full max-w-md p-6 rounded-2xl bg-white border border-slate-200 flex flex-col items-center gap-4">
+                  <div className="w-16 h-16 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
                     <Mic className="w-8 h-8" />
                   </div>
                   <audio src={previewUrl} controls className="w-full" />
@@ -392,19 +389,18 @@ export const NewSessionPage: React.FC = () => {
               )
             )}
 
-            {/* Active Recording State Overlay */}
             {isRecording && (
-              <div className="z-10 flex flex-col items-center justify-center gap-4 bg-slate-950/60 p-6 rounded-2xl backdrop-blur-sm">
+              <div className="z-10 flex flex-col items-center justify-center gap-4 bg-white/90 p-6 rounded-2xl backdrop-blur-sm border border-slate-200">
                 <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded-full bg-rose-500 animate-ping" />
-                  <span className="text-3xl font-mono font-bold text-white tracking-wider">
+                  <div className="w-4 h-4 rounded-full bg-rose-600 animate-ping" />
+                  <span className="text-3xl font-mono font-bold text-slate-900">
                     {formatTimer(recordingSeconds)}
                   </span>
-                  <span className="text-xs text-slate-400">/ 03:00 max</span>
+                  <span className="text-xs text-slate-500">/ 03:00 max</span>
                 </div>
                 <button
                   onClick={stopRecording}
-                  className="px-6 py-3 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-semibold flex items-center gap-2 shadow-lg shadow-rose-600/30 transition-all"
+                  className="px-6 py-2.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs flex items-center gap-2 shadow-md"
                 >
                   <Square className="w-4 h-4 fill-white" />
                   Stop Recording
@@ -412,34 +408,32 @@ export const NewSessionPage: React.FC = () => {
               </div>
             )}
 
-            {/* Initial Idle State (Before Recording) */}
             {!isRecording && !previewUrl && !uploadedFile && (
               <div className="flex flex-col items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center shadow-inner">
+                <div className="w-16 h-16 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center shadow-xs">
                   {mediaType === 'video' ? <Video className="w-8 h-8" /> : <Mic className="w-8 h-8" />}
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-white">
+                  <h3 className="text-base font-bold text-slate-900">
                     Ready to record {mediaType === 'video' ? 'video' : 'audio'} clip
                   </h3>
-                  <p className="text-xs text-slate-400 mt-1">Speak clearly into your microphone (1-3 minutes recommended)</p>
+                  <p className="text-xs text-slate-500 mt-1">Speak clearly into your microphone (1-3 minutes recommended)</p>
                 </div>
                 <button
                   onClick={startRecording}
-                  className="px-8 py-3.5 rounded-full bg-gradient-to-r from-indigo-600 to-teal-500 hover:opacity-95 text-white font-bold shadow-xl shadow-indigo-500/30 flex items-center gap-2 transition-all hover:scale-105"
+                  className="px-8 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 flex items-center gap-2 transition-all hover:scale-105"
                 >
-                  <Play className="w-5 h-5 fill-white" />
+                  <Play className="w-4 h-4 fill-white" />
                   Start Recording
                 </button>
               </div>
             )}
 
-            {/* Re-record Action */}
             {!isRecording && (previewUrl || uploadedFile) && (
               <div className="mt-4 flex items-center gap-3">
                 <button
                   onClick={resetRecording}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-2 transition-colors"
+                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold flex items-center gap-2 transition-colors"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   Re-record Clip
@@ -449,20 +443,15 @@ export const NewSessionPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Alternative: File Upload */}
+        {/* File Upload Alternative */}
         {!isRecording && !previewUrl && (
-          <div className="pt-4 border-t border-slate-800/80">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Or Upload Media File Instead
-              </span>
-            </div>
-            <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-800 hover:border-slate-700 bg-slate-900/40 rounded-xl p-6 cursor-pointer transition-all">
-              <UploadCloud className="w-8 h-8 text-slate-500 mb-2" />
-              <span className="text-sm font-medium text-slate-300">
+          <div className="pt-4 border-t border-slate-100">
+            <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 hover:border-blue-400 bg-slate-50 rounded-2xl p-6 cursor-pointer transition-all">
+              <UploadCloud className="w-8 h-8 text-slate-400 mb-2" />
+              <span className="text-xs font-bold text-slate-700">
                 {uploadedFile ? uploadedFile.name : 'Click to upload MP4, WebM, MP3, WAV, or OGG'}
               </span>
-              <span className="text-xs text-slate-500 mt-1">Max upload limit: 100MB</span>
+              <span className="text-[11px] text-slate-400 mt-1">Max upload limit: 100MB</span>
               <input
                 type="file"
                 accept="video/*,audio/*"
@@ -477,26 +466,25 @@ export const NewSessionPage: React.FC = () => {
           </div>
         )}
 
-        {/* Error Alert */}
         {submitError && (
-          <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm">
+          <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
             {submitError}
           </div>
         )}
 
         {/* Submit Actions */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-800">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-100">
           <button
             onClick={() => handleSubmitSession(true)}
-            className="w-full sm:w-auto text-xs text-indigo-400 hover:text-indigo-300 px-4 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 transition-all"
+            className="w-full sm:w-auto text-xs text-blue-600 font-bold hover:text-blue-700 px-4 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 transition-all"
           >
-            ⚡ Try Sample Report (Instant Demo Mode)
+            ⚡ Sample Demo Report (Instant Mode)
           </button>
 
           <button
             onClick={() => handleSubmitSession(false)}
             disabled={(!recordedBlob && !uploadedFile) || isSubmitting}
-            className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-teal-400 hover:opacity-95 text-white font-bold shadow-xl shadow-indigo-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+            className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
           >
             {isSubmitting ? (
               <div className="flex items-center gap-2">
@@ -505,7 +493,7 @@ export const NewSessionPage: React.FC = () => {
               </div>
             ) : (
               <>
-                <Sparkles className="w-5 h-5" />
+                <Sparkles className="w-4 h-4" />
                 <span>Submit for AI Analysis</span>
               </>
             )}
@@ -514,27 +502,27 @@ export const NewSessionPage: React.FC = () => {
 
       </div>
 
-      {/* Progress Modal overlay while submitting */}
+      {/* Progress Modal overlay */}
       {isSubmitting && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-panel max-w-md w-full p-8 rounded-2xl border border-slate-800 text-center space-y-6">
-            <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
-              <div className="absolute inset-0 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 animate-spin" />
-              <Sparkles className="w-8 h-8 text-teal-400 animate-pulse" />
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white max-w-md w-full p-8 rounded-3xl border border-slate-200 text-center space-y-6 shadow-xl">
+            <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
+              <Sparkles className="w-6 h-6 text-blue-600 animate-pulse" />
             </div>
 
             <div>
-              <h3 className="text-xl font-bold text-white">Analyzing Your Speech</h3>
-              <p className="text-xs text-slate-400 mt-1">FluentLens AI is evaluating your delivery and feedback...</p>
+              <h3 className="text-lg font-bold text-slate-900">Analyzing Your Speech</h3>
+              <p className="text-xs text-slate-500 mt-1">FluentLens AI is evaluating your delivery and feedback...</p>
             </div>
 
             <div className="space-y-3 text-left">
-              <div className="flex items-center gap-3 text-xs text-emerald-400">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <div className="flex items-center gap-3 text-xs text-emerald-700 font-medium">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
                 <span>Uploaded media clip securely</span>
               </div>
-              <div className="flex items-center gap-3 text-xs text-indigo-300">
-                <div className="w-4 h-4 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin shrink-0" />
+              <div className="flex items-center gap-3 text-xs text-blue-700 font-medium">
+                <div className="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin shrink-0" />
                 <span>{pollingStep}</span>
               </div>
             </div>
