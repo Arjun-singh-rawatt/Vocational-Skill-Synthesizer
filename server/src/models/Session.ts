@@ -19,6 +19,11 @@ export interface ISession extends Document {
   report?: IReport;
   fluency?: FluencyMetrics;
   interactionId?: string;
+  mimeType?: string;
+  mediaFilename?: string;
+  temperature?: number;
+  isDemo?: boolean;
+  isReevaluating?: boolean;
   chat: IChatMessage[];
   createdAt: Date;
 }
@@ -44,9 +49,22 @@ const SessionSchema = new Schema<ISession>(
     report: { type: Schema.Types.Mixed },
     fluency: { type: Schema.Types.Mixed },
     interactionId: { type: String },
+    mimeType: { type: String },
+    mediaFilename: { type: String },
+    temperature: { type: Number, min: 0, max: 1, default: 0.7 },
+    isDemo: { type: Boolean, default: false },
+    isReevaluating: { type: Boolean, default: false },
     chat: [ChatMessageSchema],
   },
   { timestamps: true }
 );
+
+SessionSchema.set('toJSON', {
+  transform: (doc, ret: any) => {
+    ret.canReevaluate = Boolean(doc.mediaFilename) && !doc.isDemo;
+    delete ret.mediaFilename;
+    return ret;
+  },
+});
 
 export const Session = mongoose.model<ISession>('Session', SessionSchema);

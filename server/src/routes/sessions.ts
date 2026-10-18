@@ -14,6 +14,13 @@ import { calculateFluencyIndex } from '../services/fluency';
 import { calculateStreak } from '../services/streak';
 import { checkAndMarkSavedWordsLearned } from '../services/vocab';
 import sampleReportData from '../demo/sampleReport.json';
+import {
+  getUploadsDir,
+  resolveSessionMediaPath,
+  originalMediaExists,
+  reevaluatePreflight,
+  buildAnalysisFailureUpdate,
+} from '../services/sessionMedia';
 
 const router = Router();
 
@@ -106,6 +113,11 @@ router.post('/', authMiddleware, sessionRateLimiter, upload.single('file'), asyn
       mediaType,
       durationSec,
       status: 'processing',
+      mimeType,
+      mediaFilename: filePath ? path.basename(filePath) : undefined,
+      temperature: tempNum,
+      isDemo: forceDemo,
+      isReevaluating: false,
       chat: [],
     });
 
@@ -163,6 +175,89 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
 
 const askSchema = z.object({
   question: z.string().min(1, 'Question cannot be empty'),
+});
+
+const reevaluateSchema = z.object({
+  temperature: z.number().min(0).max(1),
+});
+
+// POST /api/sessions/:id/reevaluate
+router.post('/:id/reevaluate', authMiddleware, sessionRateLimiter, async (req: AuthRequest, res: Response) => {
+  try {
+    const parseResult = reevaluateSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ error: parseResult.error.errors[0].message });
+    }
+
+    const temperature = Math.min(1, Math.max(0, parseResult.data.temperature));
+    const uploadDir = getUploadsDir(__dirname);
+
+    const session = await Session.findOne({ _id: req.params.id, userId: req.userId });
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const fileExists = originalMediaExists(uploadDir, session.mediaFilename);
+    const preflight = reevaluatePreflight(session, fileExists);
+    if (!preflight.ok) {
+      return res.status(preflight.status).json({ error: preflight.error });
+    }
+
+    const locked = await Session.findOneAndUpdate(
+      {
+        _id: session._id,
+        userId: req.userId,
+        status: 'done',
+        isReevaluating: { $ne: true },
+      },
+      {
+        $set: {
+          isReevaluating: true,
+          temperature,
+        },
+        $unset: { errorMessage: 1 },
+      },
+      { new: true }
+    );
+
+    if (!locked) {
+      return res.status(409).json({ error: 'Evaluation already in progress' });
+    }
+
+    let filePath: string;
+    try {
+      filePath = resolveSessionMediaPath(uploadDir, locked.mediaFilename);
+    } catch (pathErr: any) {
+      await Session.findByIdAndUpdate(locked._id, {
+        isReevaluating: false,
+        errorMessage: pathErr.message || 'Original media is not available for this session.',
+      });
+      return res.status(400).json({ error: pathErr.message || 'Original media is not available for this session.' });
+    }
+
+    res.status(202).json({
+      id: locked._id.toString(),
+      status: 'evaluating',
+    });
+
+    processSessionAsync({
+      sessionId: locked._id.toString(),
+      userId: req.userId!,
+      filePath,
+      mimeType: locked.mimeType || 'audio/webm',
+      mediaType: locked.mediaType,
+      language: locked.language,
+      goal: locked.goal,
+      durationSec: locked.durationSec,
+      forceDemo: false,
+      temperature,
+      mode: 'reevaluate',
+    }).catch((err) => {
+      console.error(`[Reevaluate Job Error] Session ${locked._id}:`, err);
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to re-evaluate session' });
+  }
 });
 
 // POST /api/sessions/:id/ask
@@ -234,21 +329,39 @@ async function processSessionAsync(opts: {
   durationSec: number;
   forceDemo: boolean;
   temperature?: number;
+  mode?: 'initial' | 'reevaluate';
 }) {
-  const { sessionId, userId, filePath, mimeType, mediaType, language, goal, durationSec, forceDemo, temperature = 0.7 } = opts;
+  const {
+    sessionId,
+    userId,
+    filePath,
+    mimeType,
+    mediaType,
+    language,
+    goal,
+    durationSec,
+    forceDemo,
+    temperature = 0.7,
+    mode = 'initial',
+  } = opts;
+  const isReevaluate = mode === 'reevaluate';
 
   try {
     let report: any;
     let interactionId: string | undefined = undefined;
     let totalSilenceSec = 3.5;
 
-    if (forceDemo || !filePath || !fs.existsSync(filePath)) {
+    if (!isReevaluate && (forceDemo || !filePath || !fs.existsSync(filePath))) {
       console.log(`[Background Job] Processing session ${sessionId} in DEMO_MODE`);
       // Simulate 3-second processing delay for demo mode UX
       await new Promise((r) => setTimeout(r, 3000));
       report = sampleReportData;
     } else {
-      console.log(`[Background Job] Processing session ${sessionId} with real media pipeline...`);
+      if (!filePath || !fs.existsSync(filePath)) {
+        throw new Error('Original recording is no longer available on the server. Please upload the clip again.');
+      }
+
+      console.log(`[Background Job] Processing session ${sessionId} with real media pipeline (temperature=${temperature})...`);
 
       // 1. Run FFmpeg silence detection
       const silenceRes = await detectAudioSilence(filePath);
@@ -284,47 +397,41 @@ async function processSessionAsync(opts: {
       language,
     });
 
-    // 5. Update user streak
-    const user = await User.findById(userId);
-    if (user) {
-      const streakRes = calculateStreak({
-        lastPracticeDate: user.lastPracticeDate,
-        currentStreak: user.currentStreak,
-        longestStreak: user.longestStreak,
-        now: new Date(),
-        timezone: user.timezone || 'UTC',
-      });
-      user.currentStreak = streakRes.currentStreak;
-      user.longestStreak = streakRes.longestStreak;
-      user.lastPracticeDate = streakRes.lastPracticeDate;
-      await user.save();
+    // 5. Update user streak only on the first analysis of a clip
+    if (!isReevaluate) {
+      const user = await User.findById(userId);
+      if (user) {
+        const streakRes = calculateStreak({
+          lastPracticeDate: user.lastPracticeDate,
+          currentStreak: user.currentStreak,
+          longestStreak: user.longestStreak,
+          now: new Date(),
+          timezone: user.timezone || 'UTC',
+        });
+        user.currentStreak = streakRes.currentStreak;
+        user.longestStreak = streakRes.longestStreak;
+        user.lastPracticeDate = streakRes.lastPracticeDate;
+        await user.save();
+      }
     }
 
-    // 6. Save Session as "done"
+    // 6. Save Session as "done" (keep original local media for later re-evaluation)
     await Session.findByIdAndUpdate(sessionId, {
-      status: 'done',
-      report,
-      fluency,
-      interactionId,
+      $set: {
+        status: 'done',
+        report,
+        fluency,
+        interactionId,
+        temperature,
+        isReevaluating: false,
+      },
+      $unset: { errorMessage: 1 },
     });
 
     console.log(`[Background Job] Session ${sessionId} successfully processed and marked DONE!`);
   } catch (err: any) {
     console.error(`[Background Job Error] Session ${sessionId} failed:`, err);
-    await Session.findByIdAndUpdate(sessionId, {
-      status: 'failed',
-      errorMessage: err.message || 'Media analysis failed. Please try again.',
-    });
-  } finally {
-    // 7. ALWAYS delete the local temporary file
-    if (filePath && fs.existsSync(filePath)) {
-      try {
-        fs.unlinkSync(filePath);
-        console.log(`[Background Job] Cleaned up temporary upload file: ${filePath}`);
-      } catch (e) {
-        console.warn(`[Background Job] Failed to delete temp file ${filePath}:`, e);
-      }
-    }
+    await Session.findByIdAndUpdate(sessionId, buildAnalysisFailureUpdate(isReevaluate, err.message));
   }
 }
 

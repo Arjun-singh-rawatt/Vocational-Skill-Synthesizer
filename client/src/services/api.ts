@@ -68,6 +68,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ question }),
       }),
+    reevaluate: (id: string, temperature: number) =>
+      request<{ id: string; status: string }>(`/api/sessions/${id}/reevaluate`, {
+        method: 'POST',
+        body: JSON.stringify({ temperature }),
+      }),
   },
   vocab: {
     save: (payload: { word: string; meaning: string; example: string; language: string; sourceSessionId?: string }) =>
