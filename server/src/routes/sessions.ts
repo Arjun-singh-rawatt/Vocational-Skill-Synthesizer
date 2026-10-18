@@ -59,6 +59,7 @@ const createSessionSchema = z.object({
   language: z.string().min(1, 'Target language is required'),
   goal: z.enum(['conversation', 'interview', 'ielts', 'presentation']),
   isDemo: z.string().optional(),
+  temperature: z.string().optional(),
 });
 
 // POST /api/sessions
@@ -72,7 +73,14 @@ router.post('/', authMiddleware, sessionRateLimiter, upload.single('file'), asyn
       return res.status(400).json({ error: parseResult.error.errors[0].message });
     }
 
-    const { language, goal, isDemo } = parseResult.data;
+    const { language, goal, isDemo, temperature } = parseResult.data;
+    let tempNum = 0.7;
+    if (temperature !== undefined) {
+      const parsed = parseFloat(temperature);
+      if (!isNaN(parsed)) {
+        tempNum = Math.min(1, Math.max(0, parsed));
+      }
+    }
     const forceDemo = isDemo === 'true' || env.DEMO_MODE;
 
     if (!req.file && !forceDemo) {
@@ -120,6 +128,7 @@ router.post('/', authMiddleware, sessionRateLimiter, upload.single('file'), asyn
       goal,
       durationSec,
       forceDemo,
+      temperature: tempNum,
     }).catch((err) => {
       console.error(`[Session Job Error] Session ${session._id}:`, err);
     });
@@ -224,8 +233,9 @@ async function processSessionAsync(opts: {
   goal: string;
   durationSec: number;
   forceDemo: boolean;
+  temperature?: number;
 }) {
-  const { sessionId, userId, filePath, mimeType, mediaType, language, goal, durationSec, forceDemo } = opts;
+  const { sessionId, userId, filePath, mimeType, mediaType, language, goal, durationSec, forceDemo, temperature = 0.7 } = opts;
 
   try {
     let report: any;
@@ -251,6 +261,7 @@ async function processSessionAsync(opts: {
         targetLanguage: language,
         goal,
         mediaType,
+        temperature,
       });
 
       report = geminiRes.report;

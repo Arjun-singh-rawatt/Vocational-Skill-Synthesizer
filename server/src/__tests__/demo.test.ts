@@ -14,5 +14,11 @@ describe('Demo Mode Sample Report Verification', () => {
     expect(sampleReportData.scores.vocabulary).toBeGreaterThan(0);
     expect(sampleReportData.key_details.length).toBeGreaterThan(0);
     expect(sampleReportData.actions.length).toBeGreaterThan(0);
+    expect(sampleReportData.improvements).toBeDefined();
+    expect(sampleReportData.improvements.tone.label).toBeDefined();
+    expect(Array.isArray(sampleReportData.improvements.word_choices)).toBe(true);
+    expect(Array.isArray(sampleReportData.improvements.vocabulary_upgrades)).toBe(true);
+    expect(Array.isArray(sampleReportData.improvements.phrase_upgrades)).toBe(true);
+    expect(Array.isArray(sampleReportData.improvements.sentence_structure)).toBe(true);
   });
 });

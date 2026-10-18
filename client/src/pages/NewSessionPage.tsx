@@ -211,7 +211,7 @@ export const NewSessionPage: React.FC = () => {
           if (session.status === 'done') {
             clearInterval(pollInterval);
             setIsSubmitting(false);
-            navigate(`/sessions/${sessionId}`, { state: { previewUrl } });
+            navigate('/');
           } else if (session.status === 'failed') {
             clearInterval(pollInterval);
             setIsSubmitting(false);

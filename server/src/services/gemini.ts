@@ -59,6 +59,53 @@ export const reportZodSchema = z.object({
   ),
   filler_words_detected: z.array(z.string()),
   overall_summary: z.string(),
+  improvements: z.object({
+    word_choices: z.array(
+      z.object({
+        original: z.string(),
+        better: z.string(),
+        reason: z.string(),
+      })
+    ),
+    vocabulary_upgrades: z.array(
+      z.object({
+        word: z.string(),
+        meaning: z.string(),
+        example: z.string(),
+        replaces: z.string().nullable(),
+      })
+    ),
+    phrase_upgrades: z.array(
+      z.object({
+        original_sentence: z.string(),
+        upgraded: z.string(),
+        idiom_or_phrase: z.string(),
+        meaning: z.string(),
+      })
+    ),
+    sentence_structure: z.array(
+      z.object({
+        original: z.string(),
+        improved: z.string(),
+        explanation: z.string(),
+      })
+    ),
+    tone: z.object({
+      label: z.enum([
+        'neutral',
+        'emotional',
+        'suspenseful',
+        'comedic',
+        'serious',
+        'enthusiastic',
+        'nervous',
+        'sad',
+        'angry',
+        'inspirational',
+      ]),
+      reason: z.string(),
+    }),
+  }),
 });
 
 export type IReport = z.infer<typeof reportZodSchema>;
@@ -68,6 +115,28 @@ function getGeminiClient() {
     throw new Error('GEMINI_API_KEY is not set in environment.');
   }
   return new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+}
+
+function getTemperatureMode(temperature: number): { mode: string; guidance: string } {
+  if (temperature < 0.35) {
+    return {
+      mode: 'Accurate mode',
+      guidance:
+        'Accurate mode: suggest simple, common, safe vocabulary and standard sentence structures that fit the speaker\'s CEFR level; use idioms only if very common; keep rewrites close to what the speaker said.',
+    };
+  } else if (temperature <= 0.7) {
+    return {
+      mode: 'Balanced mode',
+      guidance:
+        'Balanced mode: natural, fluent vocabulary and a mix of structures; a few well-known idioms where they genuinely fit.',
+    };
+  } else {
+    return {
+      mode: 'Creative mode',
+      guidance:
+        'Creative mode: richer, more expressive vocabulary, varied and more sophisticated sentence structures, and idioms/phrases wherever natural.',
+    };
+  }
 }
 
 const COACHING_SYSTEM_INSTRUCTION = `
@@ -161,12 +230,90 @@ const REPORT_SCHEMA_JSON_STRING = JSON.stringify({
       }
     },
     filler_words_detected: { type: "ARRAY", items: { type: "STRING" } },
-    overall_summary: { type: "STRING" }
+    overall_summary: { type: "STRING" },
+    improvements: {
+      type: "OBJECT",
+      properties: {
+        word_choices: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              original: { type: "STRING" },
+              better: { type: "STRING" },
+              reason: { type: "STRING" }
+            },
+            required: ["original", "better", "reason"]
+          }
+        },
+        vocabulary_upgrades: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              word: { type: "STRING" },
+              meaning: { type: "STRING" },
+              example: { type: "STRING" },
+              replaces: { type: "STRING", nullable: true }
+            },
+            required: ["word", "meaning", "example"]
+          }
+        },
+        phrase_upgrades: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              original_sentence: { type: "STRING" },
+              upgraded: { type: "STRING" },
+              idiom_or_phrase: { type: "STRING" },
+              meaning: { type: "STRING" }
+            },
+            required: ["original_sentence", "upgraded", "idiom_or_phrase", "meaning"]
+          }
+        },
+        sentence_structure: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              original: { type: "STRING" },
+              improved: { type: "STRING" },
+              explanation: { type: "STRING" }
+            },
+            required: ["original", "improved", "explanation"]
+          }
+        },
+        tone: {
+          type: "OBJECT",
+          properties: {
+            label: {
+              type: "STRING",
+              enum: [
+                "neutral",
+                "emotional",
+                "suspenseful",
+                "comedic",
+                "serious",
+                "enthusiastic",
+                "nervous",
+                "sad",
+                "angry",
+                "inspirational"
+              ]
+            },
+            reason: { type: "STRING" }
+          },
+          required: ["label", "reason"]
+        }
+      },
+      required: ["word_choices", "vocabulary_upgrades", "phrase_upgrades", "sentence_structure", "tone"]
+    }
   },
   required: [
     "language", "detected_level", "transcript", "scores", "plan",
     "key_details", "actions", "vocabulary_suggestions", "idiom_suggestions",
-    "filler_words_detected", "overall_summary"
+    "filler_words_detected", "overall_summary", "improvements"
   ]
 });
 
@@ -176,8 +323,11 @@ export async function analyzeMediaWithGemini(options: {
   targetLanguage: string;
   goal: string;
   mediaType: 'video' | 'audio';
+  temperature?: number;
 }): Promise<{ report: IReport; interactionId?: string; pathUsed: string }> {
   const ai = getGeminiClient();
+  const temperature = options.temperature !== undefined ? Math.min(1, Math.max(0, options.temperature)) : 0.7;
+  const { mode, guidance } = getTemperatureMode(temperature);
 
   console.log(`[Gemini] Uploading media file (${options.mimeType})...`);
   const uploadedFile = await ai.files.upload({
@@ -202,7 +352,16 @@ export async function analyzeMediaWithGemini(options: {
 
   const prompt = `Analyze this spoken language recording for a learner whose goal is "${options.goal}" and target language is "${options.targetLanguage}".
 Provide a complete, detailed evaluation adhering strictly to the JSON schema.
-Ensure timestamps in key_details use mm:ss format. Include verbatim transcript and list all filler words.`;
+Ensure timestamps in key_details use mm:ss format. Include verbatim transcript and list all filler words.
+
+Temperature setting: ${temperature.toFixed(2)} (${mode}).
+Feedback guidance: ${guidance}
+
+Improvements instructions:
+- Cap each improvements array (word_choices, vocabulary_upgrades, phrase_upgrades, sentence_structure) at 5 items maximum to keep responses small and fast.
+- Quote the speaker's actual spoken words in "original", "original_sentence", and "original"; do NOT invent sentences they did not say.
+- If nothing applies for a section, return an empty array rather than inventing items.
+- For audio-only and video alike, judge tone from voice (and facial expression/body language if video). Provide a valid label enum and ONE short sentence explaining why that label was chosen.`;
 
   let responseText = '';
   let interactionId: string | undefined = undefined;
@@ -212,10 +371,12 @@ Ensure timestamps in key_details use mm:ss format. Include verbatim transcript a
     console.log('[Gemini] Attempting primary path: Interactions API');
     const interactionInput: any[] = [prompt, activeFile];
 
+    // Note: @google/genai Interactions API is an experimental preview; we pass temperature here in interactionConfig
     const interactionConfig: any = {
       systemInstruction: COACHING_SYSTEM_INSTRUCTION,
       responseMimeType: 'application/json',
       responseSchema: JSON.parse(REPORT_SCHEMA_JSON_STRING),
+      temperature,
     };
 
     if (options.mediaType === 'video') {
@@ -246,6 +407,7 @@ Ensure timestamps in key_details use mm:ss format. Include verbatim transcript a
         config: {
           responseMimeType: 'application/json',
           responseSchema: JSON.parse(REPORT_SCHEMA_JSON_STRING),
+          temperature,
         }
       });
 
@@ -272,19 +434,19 @@ Ensure timestamps in key_details use mm:ss format. Include verbatim transcript a
     const parsed = reportZodSchema.safeParse(rawJson);
     if (!parsed.success) {
       console.warn(`[Gemini] Zod validation failed on initial response: ${parsed.error.errors[0].message}. Retrying once with reminder...`);
-      report = await retryReportValidation(ai, rawJson, parsed.error.errors[0].message);
+      report = await retryReportValidation(ai, rawJson, parsed.error.errors[0].message, temperature);
     } else {
       report = parsed.data;
     }
   } catch (parseErr: any) {
     console.warn(`[Gemini] Failed to parse JSON response. Retrying once... ${parseErr.message}`);
-    report = await retryReportValidation(ai, responseText, parseErr.message);
+    report = await retryReportValidation(ai, responseText, parseErr.message, temperature);
   }
 
   return { report, interactionId, pathUsed };
 }
 
-async function retryReportValidation(ai: GoogleGenAI, invalidText: any, errorReason: string): Promise<IReport> {
+async function retryReportValidation(ai: GoogleGenAI, invalidText: any, errorReason: string, temperature: number = 0.7): Promise<IReport> {
   const retryPrompt = `The following output failed schema validation because: "${errorReason}".
 Please fix it and return ONLY valid JSON matching the exact schema required.
 Invalid output:
@@ -296,6 +458,7 @@ ${typeof invalidText === 'string' ? invalidText : JSON.stringify(invalidText)}`;
     config: {
       responseMimeType: 'application/json',
       responseSchema: JSON.parse(REPORT_SCHEMA_JSON_STRING),
+      temperature,
     }
   });
 

@@ -91,5 +91,74 @@
     "actually",
     "like"
   ],
-  "overall_summary": "Overall strong presentation with clear pronunciation and coherent structure. Practicing silent pauses and incorporating higher-level professional phrasing will elevate your delivery to C1 level."
+  "overall_summary": "Overall strong presentation with clear pronunciation and coherent structure. Practicing silent pauses and incorporating higher-level professional phrasing will elevate your delivery to C1 level.",
+  "improvements": {
+    "word_choices": [
+      {
+        "original": "really exciting",
+        "better": "highly rewarding",
+        "reason": "Elevates conversational phrasing to professional interview vocabulary."
+      },
+      {
+        "original": "actually sometimes",
+        "better": "occasionally",
+        "reason": "Removes conversational filler adverb 'actually' in favor of a concise transition."
+      },
+      {
+        "original": "like when",
+        "better": "particularly when",
+        "reason": "Replaces colloquial filler 'like' with precise professional phrasing."
+      }
+    ],
+    "vocabulary_upgrades": [
+      {
+        "word": "Pivot",
+        "meaning": "To rapidly adapt or change strategic orientation in response to circumstances.",
+        "example": "Our engineering team had to pivot quickly when client requirements shifted.",
+        "replaces": "change quickly"
+      },
+      {
+        "word": "Rewarding",
+        "meaning": "Providing substantial satisfaction, value, and professional fulfillment.",
+        "example": "Tackling complex engineering challenges has been exceptionally rewarding.",
+        "replaces": "really exciting"
+      },
+      {
+        "word": "Rigorous",
+        "meaning": "Demanding high precision, adherence to strict standards, and resilience under pressure.",
+        "example": "We maintained rigorous standards despite challenging project timelines.",
+        "replaces": "tight"
+      }
+    ],
+    "phrase_upgrades": [
+      {
+        "original_sentence": "It has been really exciting, but actually sometimes challenging, like when project deadlines are tight and we need to pivot quickly.",
+        "upgraded": "It has been immensely rewarding, though we face crunch time when project deadlines are tight and we need to adapt.",
+        "idiom_or_phrase": "crunch time",
+        "meaning": "A critical period of intense work right before a deadline."
+      },
+      {
+        "original_sentence": "like when project deadlines are tight and we need to pivot quickly.",
+        "upgraded": "particularly when deadlines are tight and our team must think on our feet.",
+        "idiom_or_phrase": "think on one's feet",
+        "meaning": "To react swiftly and intelligently under demanding circumstances."
+      }
+    ],
+    "sentence_structure": [
+      {
+        "original": "You know, I have been working in software development for three years. It has been really exciting, but actually sometimes challenging...",
+        "improved": "Over the past three years in software development, I have navigated both exhilarating technical milestones and demanding deadlines.",
+        "explanation": "Merges short disjointed sentences into a structured introductory statement using subordination."
+      },
+      {
+        "original": "Hello everyone, um, today I would like to introduce my background for this interview.",
+        "improved": "Good morning, everyone; today I am eager to share my technical background and engineering experience.",
+        "explanation": "Removes hesitant filler and establishes an authoritative, interview-ready opening posture."
+      }
+    ],
+    "tone": {
+      "label": "enthusiastic",
+      "reason": "Delivery conveys genuine passion for software engineering, with slight vocal hesitation during initial transitions."
+    }
+  }
 }
