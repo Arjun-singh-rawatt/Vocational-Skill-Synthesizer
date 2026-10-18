@@ -135,6 +135,10 @@ export const DashboardPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pollingStep, setPollingStep] = useState('Uploading media clip...');
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isReevaluating, setIsReevaluating] = useState(false);
+  const [reevalError, setReevalError] = useState<string | null>(null);
+  const reevalInFlightRef = useRef(false);
+  const reevalPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Drawers open state
   const [isDiaryOpen, setIsDiaryOpen] = useState(false);
@@ -166,6 +170,7 @@ export const DashboardPage: React.FC = () => {
     return () => {
       stopMediaStream();
       if (timerRef.current) clearInterval(timerRef.current);
+      if (reevalPollRef.current) clearInterval(reevalPollRef.current);
     };
   }, []);
 
@@ -283,8 +288,61 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
+  const finishReevaluate = (session?: any) => {
+    if (reevalPollRef.current) {
+      clearInterval(reevalPollRef.current);
+      reevalPollRef.current = null;
+    }
+    reevalInFlightRef.current = false;
+    setIsReevaluating(false);
+
+    if (!session) return;
+
+    if (session.errorMessage) {
+      setReevalError(session.errorMessage);
+      return;
+    }
+
+    setLatestSession(session);
+    if (session.report?.improvements) {
+      setImprovements(session.report.improvements);
+    }
+    if (typeof session.temperature === 'number') {
+      setSubmittedTemperature(session.temperature);
+    }
+  };
+
+  const handleReevaluate = async () => {
+    if (reevalInFlightRef.current || isReevaluating || isSubmitting) return;
+    if (!latestSession?._id || latestSession.isDemo || latestSession.canReevaluate === false) return;
+
+    reevalInFlightRef.current = true;
+    setReevalError(null);
+    setIsReevaluating(true);
+
+    try {
+      await api.sessions.reevaluate(latestSession._id, temperature);
+      reevalPollRef.current = setInterval(async () => {
+        try {
+          const session = await api.sessions.get(latestSession._id);
+          if (!session.isReevaluating) {
+            finishReevaluate(session);
+          }
+        } catch (err: any) {
+          finishReevaluate();
+          setReevalError(err.message || 'Error checking re-evaluation status.');
+        }
+      }, 3000);
+    } catch (err: any) {
+      reevalInFlightRef.current = false;
+      setIsReevaluating(false);
+      setReevalError(err.message || 'Failed to start re-evaluation.');
+    }
+  };
+
   const handleSubmitSession = async (useDemo: boolean = false) => {
     setSubmitError(null);
+    setReevalError(null);
 
     // Validate inputs
     if (!useDemo && !recordedBlob && !uploadedFile) {
@@ -356,6 +414,13 @@ export const DashboardPage: React.FC = () => {
     setRecordedBlob(null);
     setRecordingSeconds(0);
     setSubmitError(null);
+    setReevalError(null);
+    setIsReevaluating(false);
+    reevalInFlightRef.current = false;
+    if (reevalPollRef.current) {
+      clearInterval(reevalPollRef.current);
+      reevalPollRef.current = null;
+    }
   };
 
   const formatTimer = (totalSeconds: number) => {
@@ -483,9 +548,36 @@ export const DashboardPage: React.FC = () => {
 
           {/* CARD 2: TEMPERATURE (SEPARATE CARD) */}
           <div className="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs space-y-2">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-              <Thermometer className="w-3.5 h-3.5 text-blue-600" />
-              <span>Temperature</span>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                <Thermometer className="w-3.5 h-3.5 text-blue-600" />
+                <span>Temperature</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleReevaluate}
+                disabled={
+                  isReevaluating ||
+                  isSubmitting ||
+                  phase !== 'done' ||
+                  !latestSession?._id ||
+                  latestSession.isDemo ||
+                  latestSession.canReevaluate === false
+                }
+                className="px-2.5 py-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+              >
+                {isReevaluating ? (
+                  <>
+                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Evaluating…</span>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Re-evaluate</span>
+                  </>
+                )}
+              </button>
             </div>
 
             <input
@@ -494,14 +586,23 @@ export const DashboardPage: React.FC = () => {
               max="1"
               step="0.05"
               value={temperature}
+              disabled={isReevaluating || isSubmitting}
               onChange={(e) => setTemperature(parseFloat(e.target.value))}
-              className="w-full accent-blue-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"
+              className={`w-full accent-blue-600 h-1.5 bg-slate-200 rounded-lg ${
+                isReevaluating || isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+              }`}
             />
 
             <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
               <span>More Accurate<br />(Deterministic)</span>
               <span className="text-right">More Creative<br />(Diverse)</span>
             </div>
+
+            {reevalError && (
+              <div className="p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[10px] leading-relaxed">
+                {reevalError}
+              </div>
+            )}
           </div>
 
         </div>
@@ -530,7 +631,12 @@ export const DashboardPage: React.FC = () => {
                       {getClipSummaryName()}
                     </div>
                     <div className="text-[10px] text-slate-500">
-                      {selectedLanguage} &bull; {phase === 'analyzing' ? 'Processing analysis' : 'Analysis complete'}
+                      {selectedLanguage} &bull;{' '}
+                      {phase === 'analyzing'
+                        ? 'Processing analysis'
+                        : isReevaluating
+                        ? 'Re-evaluating with new temperature'
+                        : 'Analysis complete'}
                     </div>
                   </div>
                 </div>
@@ -547,7 +653,8 @@ export const DashboardPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleResetToIdle}
-                      className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200/80"
+                      disabled={isReevaluating}
+                      className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200/80 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <RotateCcw className="w-3 h-3" />
                       <span>Analyze another clip</span>
@@ -756,7 +863,9 @@ export const DashboardPage: React.FC = () => {
                 <div>
                   <h2 className="text-sm font-bold text-slate-900">Improvements</h2>
                   <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">
-                    {phase === 'done' && submittedTemperature !== null
+                    {isReevaluating
+                      ? 'Evaluating… regenerating suggestions at the selected temperature.'
+                      : phase === 'done' && submittedTemperature !== null
                       ? getTemperatureModeText(submittedTemperature)
                       : phase === 'analyzing'
                       ? 'Analyzing speech improvements...'
