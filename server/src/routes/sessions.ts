@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
-import { sessionRateLimiter } from '../middleware/rateLimiter';
+import { chatRateLimiter, sessionRateLimiter } from '../middleware/rateLimiter';
 import { Session } from '../models/Session';
 import { User } from '../models/User';
 import { env } from '../config/env';
@@ -175,6 +175,7 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
 
 const askSchema = z.object({
   question: z.string().min(1, 'Question cannot be empty'),
+  temperature: z.number().min(0).max(1).default(0.7),
 });
 
 const reevaluateSchema = z.object({
@@ -261,14 +262,14 @@ router.post('/:id/reevaluate', authMiddleware, sessionRateLimiter, async (req: A
 });
 
 // POST /api/sessions/:id/ask
-router.post('/:id/ask', authMiddleware, sessionRateLimiter, async (req: AuthRequest, res: Response) => {
+router.post('/:id/ask', authMiddleware, chatRateLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const parseResult = askSchema.safeParse(req.body);
     if (!parseResult.success) {
       return res.status(400).json({ error: parseResult.error.errors[0].message });
     }
 
-    const { question } = parseResult.data;
+    const { question, temperature } = parseResult.data;
 
     const session = await Session.findOne({ _id: req.params.id, userId: req.userId });
     if (!session) {
@@ -279,24 +280,46 @@ router.post('/:id/ask', authMiddleware, sessionRateLimiter, async (req: AuthRequ
       return res.status(400).json({ error: 'Session report is not yet ready for follow-up questions' });
     }
 
-    const transcript = session.report?.transcript || '';
-    const reportSummary = session.report?.overall_summary || session.report?.plan?.summary || '';
-
     let answer = '';
-    let isFallback = false;
+    const isFallback = false;
 
     if (env.DEMO_MODE) {
-      answer = `[Demo Mode] In your recording at 00:12, you spoke with good clarity, though reducing vocalized pauses ('you know') will make your delivery sound more authoritative.`;
-      isFallback = false;
+      const query = question.toLowerCase();
+      const improvements: any = session.report?.improvements || {};
+      if (query.includes('vocab') || query.includes('word')) {
+        const items = (improvements.vocabulary_upgrades || []).slice(0, 5);
+        answer = items.length
+          ? items.map((item: any) => `- **${item.word}** — ${item.meaning}. _"${item.example}"_`).join('\n')
+          : 'No vocabulary suggestions are available in this report.';
+      } else if (query.includes('idiom') || query.includes('phrase')) {
+        const items = (improvements.phrase_upgrades || []).slice(0, 5);
+        answer = items.length
+          ? items.map((item: any) => `- **${item.idiom_or_phrase}** — ${item.meaning}. _"${item.upgraded}"_`).join('\n')
+          : 'No idiom or phrase suggestions are available in this report.';
+      } else if (query.includes('sentence') || query.includes('structure') || query.includes('grammar')) {
+        const items = (improvements.sentence_structure || []).slice(0, 5);
+        answer = items.length
+          ? `| You said | Better |\n| --- | --- |\n${items.map((item: any) => `| ${item.original} | ${item.improved} |`).join('\n')}`
+          : 'No sentence rewrites are available in this report.';
+      } else if (query.includes('tone')) {
+        answer = improvements.tone ? `Your tone was **${improvements.tone.label}** — ${improvements.tone.reason}` : 'No tone feedback is available in this report.';
+      } else {
+        answer = 'Ask about vocabulary, idioms, sentence structure, or tone.';
+      }
     } else {
       const chatRes = await askGeminiFollowUp({
-        interactionId: session.interactionId,
         question,
-        transcript,
-        reportSummary,
+        temperature,
+        language: session.language,
+        goal: session.goal,
+        detectedLevel: session.report?.detected_level || 'unknown',
+        improvements: session.report?.improvements || {},
+        vocabularySuggestions: session.report?.vocabulary_suggestions || [],
+        idiomSuggestions: session.report?.idiom_suggestions || [],
+        transcript: (session.report?.transcript || '').slice(0, 6000),
+        priorMessages: session.chat.slice(-6).map((message) => ({ role: message.role, text: message.text })),
       });
       answer = chatRes.answer;
-      isFallback = chatRes.isFallback;
     }
 
     const userMsg = { role: 'user' as const, text: question, createdAt: new Date() };

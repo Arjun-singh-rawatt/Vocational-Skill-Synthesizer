@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
+import { MAX_FILE_SIZE_MB } from '../data/uploadLimits';
 import {
   Video,
   Mic,
@@ -451,7 +452,7 @@ export const NewSessionPage: React.FC = () => {
               <span className="text-xs font-bold text-slate-700">
                 {uploadedFile ? uploadedFile.name : 'Click to upload MP4, WebM, MP3, WAV, or OGG'}
               </span>
-              <span className="text-[11px] text-slate-400 mt-1">Max upload limit: 100MB</span>
+              <span className="text-[11px] text-slate-400 mt-1">Max upload limit: {MAX_FILE_SIZE_MB}MB</span>
               <input
                 type="file"
                 accept="video/*,audio/*"

@@ -63,10 +63,10 @@ export const api = {
       }),
     get: (id: string) => request<any>(`/api/sessions/${id}`),
     list: () => request<any[]>('/api/sessions'),
-    ask: (id: string, question: string) =>
+    ask: (id: string, question: string, temperature: number) =>
       request<{ answer: string; isFallback: boolean; chat: any[] }>(`/api/sessions/${id}/ask`, {
         method: 'POST',
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, temperature }),
       }),
     reevaluate: (id: string, temperature: number) =>
       request<{ id: string; status: string }>(`/api/sessions/${id}/reevaluate`, {

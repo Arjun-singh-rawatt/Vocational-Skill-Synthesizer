@@ -46,7 +46,7 @@ export const MyWordsPage: React.FC = () => {
       
       {/* Top Back Nav */}
       <div>
-        <Link to="/" className="inline-flex items-center gap-2 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl transition-colors">
+        <Link to="/" className="inline-flex items-center gap-2 text-xs font-bold text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl transition-colors">
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Home Workspace</span>
         </Link>
@@ -55,7 +55,7 @@ export const MyWordsPage: React.FC = () => {
       {/* Header */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">
+          <div className="flex items-center gap-2 text-xs font-bold text-brand-600 uppercase tracking-wider mb-1">
             <BookMarked className="w-4 h-4" />
             <span>Vocabulary Notebook</span>
           </div>
@@ -96,14 +96,14 @@ export const MyWordsPage: React.FC = () => {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Filter words by keyword, meaning, or language..."
-          className="w-full bg-white border border-slate-200 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-all shadow-xs"
+          className="w-full bg-white border border-slate-200 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-brand-500 transition-all shadow-xs"
         />
       </div>
 
       {/* Words Grid */}
       {loading ? (
         <div className="min-h-[40vh] flex flex-col items-center justify-center p-6 text-center">
-          <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-3" />
+          <div className="w-10 h-10 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin mb-3" />
           <p className="text-slate-500 text-xs">Loading vocabulary notebook...</p>
         </div>
       ) : filteredWords.length === 0 ? (
@@ -121,7 +121,7 @@ export const MyWordsPage: React.FC = () => {
           {filteredWords.map((item) => (
             <div
               key={item._id}
-              className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex flex-col justify-between gap-4 hover:border-blue-200 transition-all"
+              className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex flex-col justify-between gap-4 hover:border-brand-200 transition-all"
             >
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -162,7 +162,7 @@ export const MyWordsPage: React.FC = () => {
                   className={`font-bold uppercase px-2 py-0.5 rounded-full text-[10px] ${
                     item.status === 'learned'
                       ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                      : 'bg-blue-100 text-blue-800 border border-blue-200'
+                      : 'bg-brand-100 text-brand-800 border border-brand-200'
                   }`}
                 >
                   {item.status}

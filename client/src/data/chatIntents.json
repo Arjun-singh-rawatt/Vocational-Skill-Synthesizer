@@ -1,0 +1,105 @@
+{
+  "_help": "Add an intent object to intents with a unique kebab-case id, enabled:true, match rules, and a reply.\nUse exact for whole-message matches, phrases for contained phrases, or keywords for help-cued word matches.\nUse replyNoSession when the user has not completed an analysis; when controls when the intent applies.\nIntents provide text guidance only and never trigger UI actions.\nOrder is priority: the first matching intent wins, so put specific intents above general ones.\nSet enabled:false to disable an intent without deleting it.\nAvailable placeholders are {{maxFileSizeMB}}, {{maxDurationSec}}, and {{allowedFormats}}.",
+  "version": 1,
+  "settings": {
+    "maxWords": 14,
+    "typingDelayMs": 350,
+    "helpCues": ["what", "how", "why", "where", "explain", "meaning", "?", "kya", "kaise", "kyun", "kahan"],
+    "personalSpeechMarkers": ["i said", "my sentence", "my video", "my recording", "my speech", "in my clip"],
+    "noSessionFallback": "Hyy I'm here to help you however to proceed further, Please upload a clip first; you can also explore saved vocabulary in My Diary."
+  },
+  "ui": {
+    "hintBeforeAnalysis": "Upload a clip to get feedback, or ask me how things work.",
+    "hintAfterAnalysis": "Ask about your vocabulary, idioms, structure or tone.",
+    "headerHint": "Ask a question about your analyzed speaking practice.",
+    "emptyAnswerFallback": "No answer was returned.",
+    "inputPlaceholder": "Ask a question…",
+    "inputPlaceholderBeforeAnalysis": "Analyze a clip to start chatting",
+    "chipsBeforeAnalysis": ["How does temperature work?", "How do I upload?", "What can you do?"],
+    "chipsAfterAnalysis": ["More vocabulary", "Idioms I can use", "Improve my sentences", "How was my tone?"]
+  },
+  "intents": [
+    {
+      "id": "greeting", "enabled": true,
+      "match": { "exact": ["hi","hy", "hello", "hey", "hylo", "namaskar"] },
+      "when": "any",
+      "reply": "Hi! Upload a clip whenever you're ready, or ask me about FluentLens."
+    },
+    {
+      "id": "thanks", "enabled": true,
+      "match": { "exact": ["thanks", "thank you", "shukriya", "dhanyavaad"] },
+      "when": "any",
+      "reply": "You're welcome! Be consistent and you will see the magic."
+    },
+    {
+      "id": "how-to-upload", "enabled": true,
+      "match": { "phrases": ["how do i upload", "how can i upload", "upload kaise kare", "video kaise upload karu"], "keywords": ["upload*", "record*", "clip"], "needsHelpCue": true },
+      "when": "any",
+      "reply": "Click Upload Video or Upload Audio, select a clip, then press Analyze Practice Session.",
+      "replyNoSession": "Click Upload Video or Audio, select a clip, then press Analyze Practice Session."
+    },
+    {
+      "id": "limits-formats", "enabled": true,
+      "match": { "phrases": ["what are the upload limits", "which formats can i upload", "file limit kya hai", "kaun se formats upload kar sakte hain"], "keywords": ["format*", "limit*", "size"], "needsHelpCue": true },
+      "when": "any",
+      "reply": "Uploads support {{allowedFormats}}, up to {{maxFileSizeMB}} MB and {{maxDurationSec}} seconds.",
+      "replyNoSession": "The upload limits are {{maxFileSizeMB}} MB and {{maxDurationSec}} seconds; supported types: {{allowedFormats}}."
+    },
+    {
+      "id": "temperature", "enabled": true,
+      "match": { "phrases": ["how does temperature work", "what does temperature do", "temperature ky hai", "temperature ka kya matlab hai"], "keywords": ["temperature"], "needsHelpCue": true },
+      "when": "any",
+      "reply": "Temperature changes suggestion style: Accurate stays close and simple; Creative explores richer wording."
+    },
+    {
+      "id": "reevaluate", "enabled": true,
+      "match": { "phrases": ["what does re-evaluate do", "why should i re-evaluate", "reevaluate kyun karun", "re-evaluate kaise hota hai"], "keywords": ["reeval*", "re-eval*"], "needsHelpCue": true },
+      "when": "session",
+      "reply": "Re-evaluate runs your clip again with the selected temperature and refreshes its feedback."
+    },
+    {
+      "id": "saved-words-diary", "enabled": true,
+      "match": { "phrases": ["show my saved words", "where are my saved words", "saved vocabulary kahan hai", "mere saved words dikhao", "how do i save a word"], "keywords": ["diary", "vocab*", "word*"], "needsHelpCue": false },
+      "when": "any",
+      "reply": "To view your saved words, click My Diary on the dashboard. You can review saved and learned vocabulary there.",
+      "replyNoSession": "Click My Diary on the dashboard to view or add saved words and review your vocabulary."
+    },
+    {
+      "id": "saved-phrases-quotes", "enabled": true,
+      "match": { "phrases": ["show my saved phrases", "where are my quotes", "saved phrases kahan hain", "mere idioms dikhao", "how do i save a phrase"], "keywords": ["phrase*", "quote*", "idiom*"], "needsHelpCue": false },
+      "when": "any",
+      "reply": "To view your saved idioms and phrases, click the Phrases / Quote section on the dashboard.",
+      "replyNoSession": "Click the Phrases / Quote section on the dashboard to view or add saved idioms and phrases."
+    },
+    {
+      "id": "streak-calendar", "enabled": true,
+      "match": { "phrases": ["how does my streak work", "where is my practice calendar", "streak kaise badhegi", "mera calendar kahan hai"], "keywords": ["streak*", "calendar*"], "needsHelpCue": true },
+      "when": "any",
+      "reply": "Practice regularly to build your streak; the calendar marks days when you complete a session."
+    },
+    {
+      "id": "demo-report", "enabled": true,
+      "match": { "phrases": ["how do i see a demo report", "can i try a sample report", "demo report kaise dekhu", "sample report dikhao"], "keywords": ["demo", "sample"], "needsHelpCue": true },
+      "when": "any",
+      "reply": "Choose Sample Demo Report to preview an example analysis without uploading a recording."
+    },
+    {
+      "id": "change-language", "enabled": true,
+      "match": { "phrases": ["how do i change language", "where can i choose a language", "language kaise badlun", "bhasha kaise badle"], "keywords": ["language*", "bhasha"], "needsHelpCue": true },
+      "when": "any",
+      "reply": "Use the language selector in the top navigation before starting your practice session."
+    },
+    {
+      "id": "resize-chat", "enabled": true,
+      "match": { "phrases": ["how do i resize the chat", "can i make chat wider", "chat ko wide kaise karun", "chat ka size kaise badlun"], "keywords": ["resize*", "wider", "width"], "needsHelpCue": true },
+      "when": "any",
+      "reply": "Drag the divider beside the chat to resize it; double-click the divider to reset."
+    },
+    {
+      "id": "capabilities", "enabled": true,
+      "match": { "phrases": ["what can you do", "what features do you have", "aap kya kar sakte ho", "tum kya karte ho"], "keywords": ["feature*", "capabilit*"], "needsHelpCue": true },
+      "when": "any",
+      "reply": "I review speaking, suggest improvements, answer questions, and help organize vocabulary and phrases."
+    }
+  ]
+}
