@@ -7,6 +7,7 @@ export const reportZodSchema = z.object({
   language: z.string(),
   detected_level: z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']),
   transcript: z.string(),
+  improved_transcript: z.string().optional(),
   scores: z.object({
     vocabulary: z.number().min(0).max(100),
     grammar: z.number().min(0).max(100),
@@ -159,6 +160,7 @@ const REPORT_SCHEMA_JSON_STRING = JSON.stringify({
     language: { type: "STRING" },
     detected_level: { type: "STRING", enum: ["A1", "A2", "B1", "B2", "C1", "C2"] },
     transcript: { type: "STRING" },
+    improved_transcript: { type: "STRING" },
     scores: {
       type: "OBJECT",
       properties: {
@@ -311,7 +313,7 @@ const REPORT_SCHEMA_JSON_STRING = JSON.stringify({
     }
   },
   required: [
-    "language", "detected_level", "transcript", "scores", "plan",
+    "language", "detected_level", "transcript", "improved_transcript", "scores", "plan",
     "key_details", "actions", "vocabulary_suggestions", "idiom_suggestions",
     "filler_words_detected", "overall_summary", "improvements"
   ]
@@ -352,7 +354,7 @@ export async function analyzeMediaWithGemini(options: {
 
   const prompt = `Analyze this spoken language recording for a learner whose goal is "${options.goal}" and target language is "${options.targetLanguage}".
 Provide a complete, detailed evaluation adhering strictly to the JSON schema.
-Ensure timestamps in key_details use mm:ss format. Include verbatim transcript and list all filler words.
+Ensure timestamps in key_details use mm:ss format. Include the complete verbatim transcript and list all filler words. Also provide improved_transcript: a complete, natural, polished rewrite of the entire transcript, preserving all of the speaker's ideas and sequence while correcting language and removing fillers. Do not summarize, omit sentences, or limit this full rewrite to the examples below.
 
 Temperature setting: ${temperature.toFixed(2)} (${mode}).
 Feedback guidance: ${guidance}

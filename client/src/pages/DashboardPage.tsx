@@ -23,6 +23,8 @@ import {
   BookOpen,
   Layers,
   RotateCcw,
+  Bookmark,
+  Check,
 } from 'lucide-react';
 
 interface ChatMessage {
@@ -91,6 +93,9 @@ export const DashboardPage: React.FC = () => {
   // Improvements analysis state
   const [phase, setPhase] = useState<Phase>('idle');
   const [improvements, setImprovements] = useState<ImprovementsData | null>(null);
+  const [savedReportItems, setSavedReportItems] = useState<Set<string>>(new Set());
+  const [savingReportItems, setSavingReportItems] = useState<Set<string>>(new Set());
+  const [reportSaveError, setReportSaveError] = useState<string | null>(null);
   const [submittedTemperature, setSubmittedTemperature] = useState<number | null>(null);
 
   // Chat state
@@ -458,9 +463,67 @@ export const DashboardPage: React.FC = () => {
     return `Creative mode (${temp.toFixed(2)})`;
   };
 
+  const reportItemKey = (kind: 'word' | 'phrase', value: string) => `${kind}:${value.trim().toLocaleLowerCase()}`;
+  const saveReportWord = async (item: { word: string; meaning: string; example: string }) => {
+    const key = reportItemKey('word', item.word);
+    if (!item.word?.trim() || savingReportItems.has(key) || savedReportItems.has(key)) return;
+    setSavingReportItems((prev) => new Set(prev).add(key));
+    setReportSaveError(null);
+    try {
+      await api.vocab.save({ ...item, language: latestSession?.language || selectedLanguage, sourceSessionId: latestSession?._id });
+      setSavedReportItems((prev) => new Set(prev).add(key));
+    } catch (error: any) {
+      setReportSaveError(error.message || 'Could not save vocabulary item. Please try again.');
+    } finally {
+      setSavingReportItems((prev) => { const next = new Set(prev); next.delete(key); return next; });
+    }
+  };
+  const saveReportPhrase = async (phrase: string, context?: string) => {
+    const key = reportItemKey('phrase', phrase);
+    if (!phrase?.trim() || savingReportItems.has(key) || savedReportItems.has(key)) return;
+    setSavingReportItems((prev) => new Set(prev).add(key));
+    setReportSaveError(null);
+    try {
+      await api.phrases.save({ phrase, context });
+      setSavedReportItems((prev) => new Set(prev).add(key));
+    } catch (error: any) {
+      setReportSaveError(error.message || 'Could not save phrase. Please try again.');
+    } finally {
+      setSavingReportItems((prev) => { const next = new Set(prev); next.delete(key); return next; });
+    }
+  };
+
+  useEffect(() => {
+    if (!latestSession?._id) return;
+    let cancelled = false;
+    Promise.all([api.vocab.list(), api.phrases.list()]).then(([words, phrases]) => {
+      if (cancelled) return;
+      const fetchedKeys = [
+        ...words.map((item) => reportItemKey('word', item.word)),
+        ...phrases.map((item) => reportItemKey('phrase', item.phrase)),
+      ];
+      setSavedReportItems((prev) => new Set([...prev, ...fetchedKeys]));
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [latestSession?._id]);
+
   // Calendar calculations
   const activeDaysCount = progressData?.currentStreak || 12;
   const isCompact = phase === 'analyzing' || phase === 'done';
+  const vocabularyReportItems = [
+    ...(improvements?.vocabulary_upgrades || []),
+    ...(latestSession?.report?.vocabulary_suggestions || []),
+  ].filter((item, index, all) => all.findIndex((candidate) => candidate.word?.toLocaleLowerCase() === item.word?.toLocaleLowerCase()) === index);
+  const phraseReportItems = [
+    ...(improvements?.phrase_upgrades || []),
+    ...(latestSession?.report?.idiom_suggestions || []).map((item: any) => ({
+      idiom_or_phrase: item.idiom,
+      meaning: item.meaning,
+      example: item.example,
+      upgraded: item.example,
+      original_sentence: '',
+    })),
+  ].filter((item, index, all) => all.findIndex((candidate) => candidate.idiom_or_phrase?.toLocaleLowerCase() === item.idiom_or_phrase?.toLocaleLowerCase()) === index);
 
   return (
     <div className="max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-3 lg:py-4 h-full lg:max-h-[calc(100vh-4rem)] flex flex-col min-h-0 overflow-hidden">
@@ -948,6 +1011,19 @@ export const DashboardPage: React.FC = () => {
               {/* DONE STATE: 5 sections in exact order with stagger */}
               {phase === 'done' && improvements && (
                 <div className="space-y-3">
+                  {latestSession?.report?.transcript && (
+                    <section className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 space-y-2">
+                      <h3 className="text-xs font-bold text-slate-900">Original Transcript</h3>
+                      <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-700">{latestSession.report.transcript}</p>
+                      <h3 className="pt-2 border-t border-slate-200 text-xs font-bold text-slate-900">Improved Version</h3>
+                      {latestSession.report.improved_transcript ? (
+                        <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-700">{latestSession.report.improved_transcript}</p>
+                      ) : (
+                        <p className="text-xs text-slate-500">A complete improved transcript is not available for this older report.</p>
+                      )}
+                    </section>
+                  )}
+                  {reportSaveError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{reportSaveError}</p>}
                   {(() => {
                     let staggerIdx = 0;
                     return (
@@ -980,7 +1056,7 @@ export const DashboardPage: React.FC = () => {
                         )}
 
                         {/* 2. Better Vocabulary */}
-                        {improvements.vocabulary_upgrades && improvements.vocabulary_upgrades.length > 0 && (
+                        {vocabularyReportItems.length > 0 && (
                           <div
                             className="animate-fadeInUp bg-white rounded-xl p-3.5 border border-slate-200/80 shadow-2xs space-y-2.5 motion-reduce:animate-none"
                             style={{ animationDelay: `${staggerIdx++ * 80}ms` }}
@@ -990,7 +1066,7 @@ export const DashboardPage: React.FC = () => {
                               <h3 className="text-xs font-bold text-slate-900">Better Vocabulary</h3>
                             </div>
                             <div className="space-y-2">
-                              {improvements.vocabulary_upgrades.map((item: any, idx: number) => (
+                              {vocabularyReportItems.map((item: any, idx: number) => (
                                 <div key={idx} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
                                   <div className="flex items-center justify-between gap-2 flex-wrap">
                                     <span className="text-xs font-bold text-indigo-900">{item.word}</span>
@@ -1002,6 +1078,10 @@ export const DashboardPage: React.FC = () => {
                                   </div>
                                   <p className="text-[11px] text-slate-600 leading-snug">{item.meaning}</p>
                                   <p className="text-[11px] text-slate-500 italic">"{item.example}"</p>
+                                  <button onClick={() => saveReportWord(item)} disabled={savingReportItems.has(reportItemKey('word', item.word)) || savedReportItems.has(reportItemKey('word', item.word))} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-800 disabled:opacity-70">
+                                    {savedReportItems.has(reportItemKey('word', item.word)) ? <Check className="h-3 w-3" /> : <Bookmark className="h-3 w-3" />}
+                                    {savedReportItems.has(reportItemKey('word', item.word)) ? 'Saved to Diary' : savingReportItems.has(reportItemKey('word', item.word)) ? 'Saving…' : 'Save to Diary'}
+                                  </button>
                                 </div>
                               ))}
                             </div>
@@ -1009,7 +1089,7 @@ export const DashboardPage: React.FC = () => {
                         )}
 
                         {/* 3. Idioms & Phrases */}
-                        {improvements.phrase_upgrades && improvements.phrase_upgrades.length > 0 && (
+                        {phraseReportItems.length > 0 && (
                           <div
                             className="animate-fadeInUp bg-white rounded-xl p-3.5 border border-slate-200/80 shadow-2xs space-y-2.5 motion-reduce:animate-none"
                             style={{ animationDelay: `${staggerIdx++ * 80}ms` }}
@@ -1019,16 +1099,16 @@ export const DashboardPage: React.FC = () => {
                               <h3 className="text-xs font-bold text-slate-900">Idioms & Phrases</h3>
                             </div>
                             <div className="space-y-2">
-                              {improvements.phrase_upgrades.map((item: any, idx: number) => (
+                              {phraseReportItems.map((item: any, idx: number) => (
                                 <div key={idx} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
-                                  <div className="text-xs text-slate-600 flex items-start gap-1.5">
+                                  {item.original_sentence && <div className="text-xs text-slate-600 flex items-start gap-1.5">
                                     <span className="text-[10px] uppercase font-bold text-slate-400 shrink-0 mt-0.5">Original:</span>
                                     <span className="text-slate-500 line-through">"{item.original_sentence}"</span>
-                                  </div>
+                                  </div>}
                                   <div className="text-xs text-slate-800 flex items-start gap-1.5">
-                                    <span className="text-[10px] uppercase font-bold text-blue-600 shrink-0 mt-0.5">Upgraded:</span>
+                                    <span className="text-[10px] uppercase font-bold text-blue-600 shrink-0 mt-0.5">{item.original_sentence ? 'Upgraded:' : 'Example:'}</span>
                                     <span className="font-medium text-slate-900">
-                                      {renderWithHighlightedPhrase(item.upgraded, item.idiom_or_phrase)}
+                                      {item.original_sentence ? renderWithHighlightedPhrase(item.upgraded, item.idiom_or_phrase) : item.example}
                                     </span>
                                   </div>
                                   <div className="pt-1 border-t border-slate-200/60 flex items-baseline gap-1.5 text-[11px]">
@@ -1037,6 +1117,10 @@ export const DashboardPage: React.FC = () => {
                                     </span>
                                     <span className="text-slate-500">{item.meaning}</span>
                                   </div>
+                                  <button onClick={() => saveReportPhrase(item.idiom_or_phrase, item.meaning)} disabled={savingReportItems.has(reportItemKey('phrase', item.idiom_or_phrase)) || savedReportItems.has(reportItemKey('phrase', item.idiom_or_phrase))} className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800 disabled:opacity-70">
+                                    {savedReportItems.has(reportItemKey('phrase', item.idiom_or_phrase)) ? <Check className="h-3 w-3" /> : <Bookmark className="h-3 w-3" />}
+                                    {savedReportItems.has(reportItemKey('phrase', item.idiom_or_phrase)) ? 'Saved to Phrases' : savingReportItems.has(reportItemKey('phrase', item.idiom_or_phrase)) ? 'Saving…' : 'Save to Phrases'}
+                                  </button>
                                 </div>
                               ))}
                             </div>
