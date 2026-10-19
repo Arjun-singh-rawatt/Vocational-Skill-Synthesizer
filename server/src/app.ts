@@ -50,6 +50,9 @@ app.use('/api/sessions', sessionsRouter);
 import vocabRouter from './routes/vocab';
 app.use('/api/vocab', vocabRouter);
 
+import phrasesRouter from './routes/phrases';
+app.use('/api/phrases', phrasesRouter);
+
 // Progress routes
 import progressRouter from './routes/progress';
 app.use('/api/progress', progressRouter);

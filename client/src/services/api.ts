@@ -87,6 +87,12 @@ export const api = {
         method: 'DELETE',
       }),
   },
+  phrases: {
+    save: (payload: { phrase: string; context?: string; authorOrSpeaker?: string }) =>
+      request<any>('/api/phrases', { method: 'POST', body: JSON.stringify(payload) }),
+    list: () => request<any[]>('/api/phrases'),
+    delete: (id: string) => request<{ message: string }>(`/api/phrases/${id}`, { method: 'DELETE' }),
+  },
   progress: {
     get: () => request<any>('/api/progress'),
   },

@@ -85,17 +85,17 @@ export const MyDiaryDrawer: React.FC<MyDiaryDrawerProps> = ({ isOpen, onClose })
 
       {/* Drawer */}
       <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
-        <div className="w-screen max-w-md bg-white border-l border-slate-200 shadow-2xl flex flex-col justify-between">
+        <div className="w-screen max-w-md bg-[#faf8f3] border-l border-[#e7dfd3] shadow-2xl flex flex-col justify-between">
           
           {/* Header */}
-          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div className="p-5 border-b border-[#e7dfd3] flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-800">
                 <BookMarked className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-slate-900">My Diary</h2>
-                <p className="text-xs text-slate-500">Vocabulary & Saved Expressions</p>
+                <h2 className="text-lg font-semibold text-stone-900">Vocabulary Diary</h2>
+                <p className="text-xs text-stone-500">Commonplace folio • Saved expressions</p>
               </div>
             </div>
             <button
@@ -107,12 +107,12 @@ export const MyDiaryDrawer: React.FC<MyDiaryDrawerProps> = ({ isOpen, onClose })
           </div>
 
           {/* Tabs & Actions */}
-          <div className="p-4 bg-slate-50/50 border-b border-slate-100 space-y-3">
-            <div className="flex bg-slate-200/60 p-1 rounded-xl">
+          <div className="p-4 bg-[#f3efe6] border-b border-[#e7dfd3] space-y-3">
+            <div className="flex bg-[#e8e2d8] p-1 rounded-lg">
               <button
                 onClick={() => setActiveTab('saved')}
                 className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                  activeTab === 'saved' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  activeTab === 'saved' ? 'bg-[#faf8f3] text-stone-900 shadow-sm' : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
                 <BookMarked className="w-3.5 h-3.5" />
@@ -121,7 +121,7 @@ export const MyDiaryDrawer: React.FC<MyDiaryDrawerProps> = ({ isOpen, onClose })
               <button
                 onClick={() => setActiveTab('learned')}
                 className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                  activeTab === 'learned' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  activeTab === 'learned' ? 'bg-[#faf8f3] text-stone-900 shadow-sm' : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
                 <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
@@ -131,19 +131,19 @@ export const MyDiaryDrawer: React.FC<MyDiaryDrawerProps> = ({ isOpen, onClose })
 
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                <Search className="absolute left-3 top-2.5 w-4 h-4 text-stone-400" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search saved vocabulary..."
-                  className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500"
+                  className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-[#ded5c8] rounded-lg focus:outline-none focus:border-emerald-800"
                 />
               </div>
 
               <button
                 onClick={() => setShowAddForm(!showAddForm)}
-                className="px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold flex items-center gap-1 hover:bg-indigo-700 transition-colors"
+                className="px-3 py-2 bg-emerald-900 text-white rounded-lg text-xs font-semibold flex items-center gap-1 hover:bg-emerald-800 transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add</span>
@@ -153,15 +153,15 @@ export const MyDiaryDrawer: React.FC<MyDiaryDrawerProps> = ({ isOpen, onClose })
 
           {/* Add Word Form */}
           {showAddForm && (
-            <form onSubmit={handleAddWord} className="p-4 bg-indigo-50/60 border-b border-indigo-100 space-y-3">
-              <div className="text-xs font-bold text-indigo-900">Add New Word / Expression</div>
+            <form onSubmit={handleAddWord} className="p-4 bg-[#f3efe6] border-b border-[#e7dfd3] space-y-3">
+              <div className="text-xs font-bold text-stone-800">Add a vocabulary entry</div>
               <input
                 type="text"
                 placeholder="Word or Phrase (e.g. Eloquent)"
                 value={newWord}
                 onChange={(e) => setNewWord(e.target.value)}
                 required
-                className="w-full px-3 py-1.5 text-xs bg-white border border-indigo-200 rounded-lg focus:outline-none"
+                className="w-full px-3 py-2 text-xs bg-white border border-[#ded5c8] rounded-lg focus:outline-none"
               />
               <input
                 type="text"
@@ -169,14 +169,14 @@ export const MyDiaryDrawer: React.FC<MyDiaryDrawerProps> = ({ isOpen, onClose })
                 value={newMeaning}
                 onChange={(e) => setNewMeaning(e.target.value)}
                 required
-                className="w-full px-3 py-1.5 text-xs bg-white border border-indigo-200 rounded-lg focus:outline-none"
+                className="w-full px-3 py-2 text-xs bg-white border border-[#ded5c8] rounded-lg focus:outline-none"
               />
               <input
                 type="text"
                 placeholder="Example Sentence (Optional)"
                 value={newExample}
                 onChange={(e) => setNewExample(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs bg-white border border-indigo-200 rounded-lg focus:outline-none"
+                className="w-full px-3 py-2 text-xs bg-white border border-[#ded5c8] rounded-lg focus:outline-none"
               />
               <div className="flex justify-end gap-2 pt-1">
                 <button
@@ -188,7 +188,7 @@ export const MyDiaryDrawer: React.FC<MyDiaryDrawerProps> = ({ isOpen, onClose })
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700"
+                  className="px-3 py-1.5 bg-emerald-900 text-white text-xs font-semibold rounded-lg hover:bg-emerald-800"
                 >
                   Save Word
                 </button>
@@ -213,12 +213,12 @@ export const MyDiaryDrawer: React.FC<MyDiaryDrawerProps> = ({ isOpen, onClose })
               filteredWords.map((item) => (
                 <div
                   key={item._id}
-                  className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-indigo-200 transition-all flex flex-col justify-between gap-2"
+                  className="p-4 rounded-xl bg-[#f5f1e9] border border-[#e7dfd3] shadow-sm hover:border-emerald-200 transition-all flex flex-col justify-between gap-2"
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <span className="text-sm font-bold text-indigo-950">{item.word}</span>
-                      <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                      <span className="text-sm font-bold text-stone-900">{item.word}</span>
+                      <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#eee9df] text-stone-600 border border-[#e2d9cb]">
                         {item.language || 'English'}
                       </span>
                     </div>
@@ -231,10 +231,10 @@ export const MyDiaryDrawer: React.FC<MyDiaryDrawerProps> = ({ isOpen, onClose })
                     </button>
                   </div>
 
-                  <p className="text-xs text-slate-700 font-medium">{item.meaning}</p>
+                  <p className="text-xs text-stone-700 font-medium">{item.meaning}</p>
                   
                   {item.example && (
-                    <p className="text-[11px] text-slate-500 italic bg-slate-50 p-2 rounded-lg border border-slate-100">
+                    <p className="text-[11px] text-stone-600 italic bg-[#faf8f3] p-2 rounded-lg border border-[#e7dfd3]">
                       "{item.example}"
                     </p>
                   )}
@@ -244,7 +244,7 @@ export const MyDiaryDrawer: React.FC<MyDiaryDrawerProps> = ({ isOpen, onClose })
           </div>
 
           {/* Footer */}
-          <div className="p-4 border-t border-slate-100 bg-slate-50/50 text-center text-[11px] text-slate-400">
+          <div className="p-3 border-t border-[#e7dfd3] bg-[#f3efe6] text-center text-[11px] text-stone-500">
             FluentLens Notebook &bull; Auto-syncs with practice sessions
           </div>
 
