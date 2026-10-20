@@ -38,7 +38,6 @@ export type ReevaluatePreflight = { ok: true } | { ok: false; status: number; er
 export function reevaluatePreflight(session: {
   status?: string;
   isReevaluating?: boolean;
-  isDemo?: boolean;
   mediaFilename?: string | null;
 } | null, fileExists: boolean): ReevaluatePreflight {
   if (!session) {
@@ -53,7 +52,7 @@ export function reevaluatePreflight(session: {
     return { ok: false, status: 400, error: 'Session report is not ready for re-evaluation' };
   }
 
-  if (session.isDemo || !session.mediaFilename) {
+  if (!session.mediaFilename) {
     return {
       ok: false,
       status: 400,

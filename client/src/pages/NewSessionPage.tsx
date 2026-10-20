@@ -183,7 +183,7 @@ export const NewSessionPage: React.FC = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleSubmitSession = async (useDemo: boolean = false) => {
+  const handleSubmitSession = async () => {
     setSubmitError(null);
     setIsSubmitting(true);
     setPollingStep('Uploading clip...');
@@ -193,9 +193,7 @@ export const NewSessionPage: React.FC = () => {
       formData.append('language', language);
       formData.append('goal', goal);
 
-      if (useDemo) {
-        formData.append('isDemo', 'true');
-      } else if (recordedBlob) {
+      if (recordedBlob) {
         formData.append('file', recordedBlob, 'recording.webm');
       } else if (uploadedFile) {
         formData.append('file', uploadedFile);
@@ -476,14 +474,7 @@ export const NewSessionPage: React.FC = () => {
         {/* Submit Actions */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-100">
           <button
-            onClick={() => handleSubmitSession(true)}
-            className="w-full sm:w-auto text-xs text-blue-600 font-bold hover:text-blue-700 px-4 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 transition-all"
-          >
-            ⚡ Sample Demo Report (Instant Mode)
-          </button>
-
-          <button
-            onClick={() => handleSubmitSession(false)}
+            onClick={handleSubmitSession}
             disabled={(!recordedBlob && !uploadedFile) || isSubmitting}
             className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
           >

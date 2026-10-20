@@ -5,7 +5,7 @@ import { MyDiaryDrawer } from '../components/MyDiaryDrawer';
 import { PhrasesDrawer } from '../components/PhrasesDrawer';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { getChatUi, routeChatMessage } from '../lib/chatRouter';
+import { getChatUi, routeChatMessage, getSuggestionsForIntent } from '../lib/chatRouter';
 import { ALLOWED_AUDIO_FORMATS, ALLOWED_VIDEO_FORMATS, MAX_FILE_SIZE_MB } from '../data/uploadLimits';
 import {
   Sparkles,
@@ -108,6 +108,7 @@ export const DashboardPage: React.FC = () => {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isSendingChat, setIsSendingChat] = useState(false);
+  const [chatSuggestions, setChatSuggestions] = useState<string[]>(chatUi.chipsBeforeAnalysis);
   const [temperature, setTemperature] = useState(0.7);
   const [chatWidth, setChatWidth] = useState(() => {
     try {
@@ -152,7 +153,8 @@ export const DashboardPage: React.FC = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<any>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
   const sendingChatRef = useRef(false);
 
@@ -268,6 +270,7 @@ export const DashboardPage: React.FC = () => {
     if (!messageText.trim() || sendingChatRef.current) return;
     const hasCompletedSession = phase === 'done' && latestSession?.status === 'done';
     const localReply = routeChatMessage(messageText, { hasSession: hasCompletedSession });
+    setChatSuggestions(getSuggestionsForIntent(localReply?.id, hasCompletedSession));
     const query = messageText.trim();
     const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -279,7 +282,9 @@ export const DashboardPage: React.FC = () => {
 
     try {
       if (!hasCompletedSession || localReply) {
-        const reply = localReply?.reply || "Please upload or record a video or audio first. Then I can give feedback on your own speaking. Your saved words are in **My Diary**.";
+        const reply = localReply?.reply || (hasCompletedSession
+          ? 'I could not find a quick guide for that. Ask about your report, temperature, saved vocabulary, or phrases.'
+          : 'Please upload or record a video or audio first. Then I can give feedback on your own speaking. You can find saved vocabulary in My Diary.');
         setChatMessages((prev) => [
           ...prev,
           { role: 'assistant', text: reply, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
@@ -290,6 +295,7 @@ export const DashboardPage: React.FC = () => {
           ...prev,
           { role: 'assistant', text: res.answer || chatUi.emptyAnswerFallback, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
         ]);
+        setChatSuggestions(chatUi.chipsAfterAnalysis);
       }
     } catch (err: any) {
       setChatMessages((prev) => [
@@ -304,6 +310,32 @@ export const DashboardPage: React.FC = () => {
       sendingChatRef.current = false;
       setIsSendingChat(false);
     }
+  };
+
+  const selectUploadFile = (file?: File, type: 'video' | 'audio' = mediaType) => {
+    if (!file) return;
+    setSubmitError(null);
+    const allowedExtensions = type === 'video'
+      ? /\.(mp4|mov|webm)$/i
+      : /\.(mp3|wav|webm|ogg|m4a)$/i;
+    if (!allowedExtensions.test(file.name)) {
+      setSubmitError(`Choose a supported ${type} file (${type === 'video' ? ALLOWED_VIDEO_FORMATS : ALLOWED_AUDIO_FORMATS}).`);
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      setSubmitError(`File is too large. The maximum upload size is ${MAX_FILE_SIZE_MB} MB.`);
+      return;
+    }
+    setUploadedFile(file);
+    setRecordedBlob(null);
+  };
+
+  const openFilePicker = (type: 'video' | 'audio') => {
+    setMediaType(type);
+    setUploadedFile(null);
+    setRecordedBlob(null);
+    setSubmitError(null);
+    (type === 'video' ? videoInputRef : audioInputRef).current?.click();
   };
 
   const finishReevaluate = (session?: any) => {
@@ -332,7 +364,7 @@ export const DashboardPage: React.FC = () => {
 
   const handleReevaluate = async () => {
     if (reevalInFlightRef.current || isReevaluating || isSubmitting) return;
-    if (!latestSession?._id || latestSession.isDemo || latestSession.canReevaluate === false) return;
+    if (!latestSession?._id || latestSession.canReevaluate === false) return;
 
     reevalInFlightRef.current = true;
     setReevalError(null);
@@ -358,14 +390,14 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
-  const handleSubmitSession = async (useDemo: boolean = false) => {
+  const handleSubmitSession = async () => {
     setChatMessages([]);
     setLatestSession(null);
     setSubmitError(null);
     setReevalError(null);
 
     // Validate inputs
-    if (!useDemo && !recordedBlob && !uploadedFile) {
+    if (!recordedBlob && !uploadedFile) {
       setSubmitError('Please select or record a video/audio clip first.');
       setPhase('error');
       return;
@@ -382,9 +414,7 @@ export const DashboardPage: React.FC = () => {
       formData.append('goal', 'interview');
       formData.append('temperature', temperature.toString());
 
-      if (useDemo) {
-        formData.append('isDemo', 'true');
-      } else if (recordedBlob) {
+      if (recordedBlob) {
         formData.append('file', recordedBlob, 'recording.webm');
       } else if (uploadedFile) {
         formData.append('file', uploadedFile);
@@ -454,7 +484,7 @@ export const DashboardPage: React.FC = () => {
   const getClipSummaryName = () => {
     if (uploadedFile) return uploadedFile.name;
     if (recordedBlob) return `Recorded ${mediaType} clip`;
-    return 'Sample demo clip';
+    return 'Practice clip';
   };
 
   const renderWithHighlightedPhrase = (sentence: string, phrase: string) => {
@@ -571,7 +601,7 @@ export const DashboardPage: React.FC = () => {
                 </div>
                 <h2 className="text-sm font-bold text-slate-900">AI Chatbot</h2>
                 </div>
-                <button type="button" onClick={() => setChatMessages([])} aria-label="Clear chat" title="Clear chat" className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+              <button type="button" onClick={() => { setChatMessages([]); setChatSuggestions(canChat ? chatUi.chipsAfterAnalysis : chatUi.chipsBeforeAnalysis); }} aria-label="Clear chat" title="Clear chat" className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -583,9 +613,8 @@ export const DashboardPage: React.FC = () => {
             {/* Chat Message History */}
             <div className="max-h-[170px] xl:max-h-[210px] overflow-y-auto py-2 space-y-2 pr-1 thin-scrollbar">
               {chatMessages.length === 0 && (
-                <div className="min-h-[96px] flex flex-col items-center justify-center text-center gap-2 py-3">
+                <div className="min-h-[44px] flex flex-col items-center justify-center text-center gap-2 py-2">
                   <p className="text-[11px] text-slate-400">{canChat ? chatUi.hintAfterAnalysis : chatUi.hintBeforeAnalysis}</p>
-                  <div className="flex flex-wrap justify-center gap-1.5">{(canChat ? chatUi.chipsAfterAnalysis : chatUi.chipsBeforeAnalysis).map((quickReply) => <button key={quickReply} type="button" disabled={isSendingChat} onClick={() => void handleSendChatMessage(quickReply)} className="rounded-full border border-brand-100 bg-brand-50 px-2.5 py-1 text-[10px] font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-50">{quickReply}</button>)}</div>
                 </div>
               )}
               {chatMessages.map((msg, idx) => (
@@ -634,6 +663,9 @@ export const DashboardPage: React.FC = () => {
 
             {/* Input & Send Bar */}
             <div className="pt-2 border-t border-slate-100">
+              <div className="flex flex-wrap justify-center gap-1.5 pb-2">
+                {chatSuggestions.map((quickReply) => <button key={quickReply} type="button" disabled={isSendingChat} onClick={() => void handleSendChatMessage(quickReply)} className="rounded-full border border-brand-100 bg-brand-50 px-2.5 py-1 text-[10px] font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-50">{quickReply}</button>)}
+              </div>
               <div className="relative flex items-center">
                 <input
                   type="text"
@@ -669,7 +701,6 @@ export const DashboardPage: React.FC = () => {
                   isSubmitting ||
                   phase !== 'done' ||
                   !latestSession?._id ||
-                  latestSession.isDemo ||
                   latestSession.canReevaluate === false
                 }
                 className="px-2.5 py-1 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
@@ -826,11 +857,8 @@ export const DashboardPage: React.FC = () => {
               {/* Action Buttons: Upload Video / Upload Audio */}
               <div className="flex items-center gap-2.5">
                 <button
-                  onClick={() => {
-                    setMediaType('video');
-                    setUploadedFile(null);
-                    setRecordedBlob(null);
-                  }}
+                  type="button"
+                  onClick={() => openFilePicker('video')}
                   className={`flex-1 py-2 px-3.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
                     mediaType === 'video'
                       ? 'bg-brand-600 text-white shadow-md shadow-brand-600/20'
@@ -842,11 +870,8 @@ export const DashboardPage: React.FC = () => {
                 </button>
 
                 <button
-                  onClick={() => {
-                    setMediaType('audio');
-                    setUploadedFile(null);
-                    setRecordedBlob(null);
-                  }}
+                  type="button"
+                  onClick={() => openFilePicker('audio')}
                   className={`flex-1 py-2 px-3.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
                     mediaType === 'audio'
                       ? 'bg-brand-600 text-white shadow-md shadow-brand-600/20'
@@ -860,20 +885,26 @@ export const DashboardPage: React.FC = () => {
 
               {/* Dropzone Container (Wide & Compact) */}
               <div
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => (mediaType === 'video' ? videoInputRef : audioInputRef).current?.click()}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => { event.preventDefault(); selectUploadFile(event.dataTransfer.files[0]); }}
                 className="border-2 border-dashed border-brand-200/80 hover:border-brand-400 bg-brand-50/20 hover:bg-brand-50/40 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all min-h-[135px] text-center group"
               >
                 <input
-                  ref={fileInputRef}
+                  ref={videoInputRef}
                   type="file"
-                  accept={mediaType === 'video' ? 'video/*' : 'audio/*'}
+                  accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm"
                   className="hidden"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      setUploadedFile(e.target.files[0]);
-                      setRecordedBlob(null);
-                    }
-                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => { selectUploadFile(e.target.files?.[0], 'video'); e.currentTarget.value = ''; }}
+                />
+                <input
+                  ref={audioInputRef}
+                  type="file"
+                  accept="audio/mpeg,audio/wav,audio/webm,audio/ogg,audio/mp4,.mp3,.wav,.webm,.ogg,.m4a"
+                  className="hidden"
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => { selectUploadFile(e.target.files?.[0], 'audio'); e.currentTarget.value = ''; }}
                 />
 
                 {uploadedFile ? (
@@ -970,7 +1001,7 @@ export const DashboardPage: React.FC = () => {
               {/* Submit Action Buttons */}
               <div className="pt-0.5 flex flex-col sm:flex-row items-center gap-2.5">
                 <button
-                  onClick={() => handleSubmitSession(false)}
+                  onClick={handleSubmitSession}
                   disabled={(!uploadedFile && !recordedBlob) || isSubmitting}
                   className="w-full py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl shadow-md shadow-brand-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                 >
@@ -978,13 +1009,6 @@ export const DashboardPage: React.FC = () => {
                   <span>Analyze Practice Session</span>
                 </button>
 
-                <button
-                  onClick={() => handleSubmitSession(true)}
-                  disabled={isSubmitting}
-                  className="w-full sm:w-auto text-xs font-semibold text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 px-3.5 py-2.5 rounded-xl transition-colors shrink-0 disabled:opacity-50"
-                >
-                  ⚡ Sample Demo Report
-                </button>
               </div>
 
             </div>

@@ -10,7 +10,10 @@ const router = Router();
 // GET /api/progress
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    if (mongoose.connection.readyState === 1) {
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ error: 'Progress is unavailable because the database is disconnected. Please try again later.' });
+    }
+    {
       const user = await User.findById(req.userId);
       const savedCount = await VocabWord.countDocuments({ userId: req.userId, status: 'saved' });
       const learnedCount = await VocabWord.countDocuments({ userId: req.userId, status: 'learned' });
@@ -33,9 +36,9 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       }));
 
       return res.status(200).json({
-        currentStreak: user?.currentStreak || 12,
-        longestStreak: user?.longestStreak || 15,
-        lastPracticeDate: user?.lastPracticeDate || new Date().toISOString(),
+        currentStreak: user?.currentStreak ?? 0,
+        longestStreak: user?.longestStreak ?? 0,
+        lastPracticeDate: user?.lastPracticeDate ?? null,
         savedCount,
         learnedCount,
         totalSessions: completedSessions.length,
@@ -43,26 +46,8 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Offline / Demo fallback response
-    res.status(200).json({
-      currentStreak: 12,
-      longestStreak: 15,
-      lastPracticeDate: new Date().toISOString(),
-      savedCount: 2,
-      learnedCount: 5,
-      totalSessions: 1,
-      history: [],
-    });
   } catch (err: any) {
-    res.status(200).json({
-      currentStreak: 12,
-      longestStreak: 15,
-      lastPracticeDate: new Date().toISOString(),
-      savedCount: 0,
-      learnedCount: 0,
-      totalSessions: 0,
-      history: [],
-    });
+    res.status(500).json({ error: err.message || 'Failed to fetch progress' });
   }
 });
 

@@ -15,8 +15,23 @@
     "emptyAnswerFallback": "No answer was returned.",
     "inputPlaceholder": "Ask a question…",
     "inputPlaceholderBeforeAnalysis": "Analyze a clip to start chatting",
-    "chipsBeforeAnalysis": ["How does temperature work?", "How do I upload?", "What can you do?"],
-    "chipsAfterAnalysis": ["More vocabulary", "Idioms I can use", "Improve my sentences", "How was my tone?"]
+    "chipsBeforeAnalysis": ["How do I upload a video or audio?", "How does temperature work?"],
+    "chipsAfterAnalysis": ["How do I re-evaluate my recording?", "Where can I find my saved phrases?"],
+    "fallbackSuggestions": ["How do I upload a video or audio?", "How does temperature work?"],
+    "suggestionsByIntent": {
+      "how-to-upload": ["How does temperature work?", "How do I save vocabulary?"],
+      "temperature": ["How do I re-evaluate my recording?", "Where can I find my saved phrases?"],
+      "reevaluate": ["How do I save vocabulary?", "Where can I find my saved phrases?"],
+      "saved-words-diary": ["Where can I find my saved phrases?", "How does temperature work?"],
+      "saved-phrases-quotes": ["How do I save vocabulary?", "How do I re-evaluate my recording?"],
+      "limits-formats": ["How do I upload a video or audio?", "How does temperature work?"],
+      "greeting": ["How do I upload a video or audio?", "How does temperature work?"],
+      "thanks": ["How do I save vocabulary?", "Where can I find my saved phrases?"],
+      "streak-calendar": ["How do I upload a video or audio?", "How do I save vocabulary?"],
+      "change-language": ["How do I upload a video or audio?", "How does temperature work?"],
+      "resize-chat": ["How do I upload a video or audio?", "How does temperature work?"],
+      "capabilities": ["How do I upload a video or audio?", "How does temperature work?"]
+    }
   },
   "intents": [
     {
@@ -32,11 +47,17 @@
       "reply": "You're welcome! Be consistent and you will see the magic."
     },
     {
+      "id": "reevaluate", "enabled": true,
+      "match": { "phrases": ["what does re-evaluate do", "why should i re-evaluate", "reevaluate kyun karun", "re-evaluate kaise hota hai", "how do i re-evaluate my recording"], "keywords": ["reeval*", "re-eval*"], "needsHelpCue": true },
+      "when": "session",
+      "reply": "Re-evaluate runs your clip again with the selected temperature and refreshes its feedback."
+    },
+    {
       "id": "how-to-upload", "enabled": true,
       "match": { "phrases": ["how do i upload", "how can i upload", "upload kaise kare", "video kaise upload karu"], "keywords": ["upload*", "record*", "clip"], "needsHelpCue": true },
       "when": "any",
-      "reply": "Click Upload Video or Upload Audio, select a clip, then press Analyze Practice Session.",
-      "replyNoSession": "Click Upload Video or Audio, select a clip, then press Analyze Practice Session."
+      "reply": "Click Upload Video or Upload Audio, choose a clip, then select Analyze Practice Session. The dashboard also accepts drag-and-drop files.",
+      "replyNoSession": "To start an analysis, click Upload Video or Upload Audio, choose a clip, then select Analyze Practice Session. You can also drag and drop a file."
     },
     {
       "id": "limits-formats", "enabled": true,
@@ -52,14 +73,8 @@
       "reply": "Temperature changes suggestion style: Accurate stays close and simple; Creative explores richer wording."
     },
     {
-      "id": "reevaluate", "enabled": true,
-      "match": { "phrases": ["what does re-evaluate do", "why should i re-evaluate", "reevaluate kyun karun", "re-evaluate kaise hota hai"], "keywords": ["reeval*", "re-eval*"], "needsHelpCue": true },
-      "when": "session",
-      "reply": "Re-evaluate runs your clip again with the selected temperature and refreshes its feedback."
-    },
-    {
       "id": "saved-words-diary", "enabled": true,
-      "match": { "phrases": ["show my saved words", "where are my saved words", "saved vocabulary kahan hai", "mere saved words dikhao", "how do i save a word"], "keywords": ["diary", "vocab*", "word*"], "needsHelpCue": false },
+      "match": { "phrases": ["show my saved words", "where are my saved words", "saved vocabulary kahan hai", "mere saved words dikhao", "how do i save a word", "how do i save vocabulary"], "keywords": ["diary", "vocab*", "word*"], "needsHelpCue": false },
       "when": "any",
       "reply": "To view your saved words, click My Diary on the dashboard. You can review saved and learned vocabulary there.",
       "replyNoSession": "Click My Diary on the dashboard to view or add saved words and review your vocabulary."
@@ -76,12 +91,6 @@
       "match": { "phrases": ["how does my streak work", "where is my practice calendar", "streak kaise badhegi", "mera calendar kahan hai"], "keywords": ["streak*", "calendar*"], "needsHelpCue": true },
       "when": "any",
       "reply": "Practice regularly to build your streak; the calendar marks days when you complete a session."
-    },
-    {
-      "id": "demo-report", "enabled": true,
-      "match": { "phrases": ["how do i see a demo report", "can i try a sample report", "demo report kaise dekhu", "sample report dikhao"], "keywords": ["demo", "sample"], "needsHelpCue": true },
-      "when": "any",
-      "reply": "Choose Sample Demo Report to preview an example analysis without uploading a recording."
     },
     {
       "id": "change-language", "enabled": true,

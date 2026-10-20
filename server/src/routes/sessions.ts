@@ -13,7 +13,6 @@ import { analyzeMediaWithGemini, askGeminiFollowUp } from '../services/gemini';
 import { calculateFluencyIndex } from '../services/fluency';
 import { calculateStreak } from '../services/streak';
 import { checkAndMarkSavedWordsLearned } from '../services/vocab';
-import sampleReportData from '../demo/sampleReport.json';
 import {
   getUploadsDir,
   resolveSessionMediaPath,
@@ -65,7 +64,6 @@ const upload = multer({
 const createSessionSchema = z.object({
   language: z.string().min(1, 'Target language is required'),
   goal: z.enum(['conversation', 'interview', 'ielts', 'presentation']),
-  isDemo: z.string().optional(),
   temperature: z.string().optional(),
 });
 
@@ -80,7 +78,7 @@ router.post('/', authMiddleware, sessionRateLimiter, upload.single('file'), asyn
       return res.status(400).json({ error: parseResult.error.errors[0].message });
     }
 
-    const { language, goal, isDemo, temperature } = parseResult.data;
+    const { language, goal, temperature } = parseResult.data;
     let tempNum = 0.7;
     if (temperature !== undefined) {
       const parsed = parseFloat(temperature);
@@ -88,22 +86,26 @@ router.post('/', authMiddleware, sessionRateLimiter, upload.single('file'), asyn
         tempNum = Math.min(1, Math.max(0, parsed));
       }
     }
-    const forceDemo = isDemo === 'true' || env.DEMO_MODE;
-
-    if (!req.file && !forceDemo) {
+    if (!req.file) {
       return res.status(400).json({ error: 'Media file (audio/video) is required' });
     }
 
-    let mimeType = req.file?.mimetype || 'audio/webm';
+    let mimeType = req.file.mimetype;
     let mediaType: 'video' | 'audio' = mimeType.startsWith('video/') ? 'video' : 'audio';
-    let durationSec = 60;
-
-    if (filePath && fs.existsSync(filePath)) {
+    if (!filePath || !fs.existsSync(filePath)) {
+      return res.status(400).json({ error: 'The uploaded media file could not be read. Please choose it again.' });
+    }
+    let durationSec: number;
+    try {
       durationSec = await getMediaDuration(filePath);
-      if (durationSec > env.MAX_CLIP_SECONDS) {
-        fs.unlinkSync(filePath);
-        return res.status(400).json({ error: `Clip duration (${durationSec}s) exceeds maximum allowed limit of ${env.MAX_CLIP_SECONDS}s` });
-      }
+    } catch (err: any) {
+      fs.unlinkSync(filePath);
+      filePath = undefined;
+      return res.status(400).json({ error: err.message || 'Unable to validate media duration.' });
+    }
+    if (durationSec > env.MAX_CLIP_SECONDS) {
+      fs.unlinkSync(filePath);
+      return res.status(400).json({ error: `Clip duration (${durationSec}s) exceeds maximum allowed limit of ${env.MAX_CLIP_SECONDS}s` });
     }
 
     const session = await Session.create({
@@ -114,9 +116,8 @@ router.post('/', authMiddleware, sessionRateLimiter, upload.single('file'), asyn
       durationSec,
       status: 'processing',
       mimeType,
-      mediaFilename: filePath ? path.basename(filePath) : undefined,
+      mediaFilename: path.basename(filePath!),
       temperature: tempNum,
-      isDemo: forceDemo,
       isReevaluating: false,
       chat: [],
     });
@@ -139,7 +140,6 @@ router.post('/', authMiddleware, sessionRateLimiter, upload.single('file'), asyn
       language,
       goal,
       durationSec,
-      forceDemo,
       temperature: tempNum,
     }).catch((err) => {
       console.error(`[Session Job Error] Session ${session._id}:`, err);
@@ -250,7 +250,6 @@ router.post('/:id/reevaluate', authMiddleware, sessionRateLimiter, async (req: A
       language: locked.language,
       goal: locked.goal,
       durationSec: locked.durationSec,
-      forceDemo: false,
       temperature,
       mode: 'reevaluate',
     }).catch((err) => {
@@ -283,31 +282,7 @@ router.post('/:id/ask', authMiddleware, chatRateLimiter, async (req: AuthRequest
     let answer = '';
     const isFallback = false;
 
-    if (env.DEMO_MODE) {
-      const query = question.toLowerCase();
-      const improvements: any = session.report?.improvements || {};
-      if (query.includes('vocab') || query.includes('word')) {
-        const items = (improvements.vocabulary_upgrades || []).slice(0, 5);
-        answer = items.length
-          ? items.map((item: any) => `- **${item.word}** — ${item.meaning}. _"${item.example}"_`).join('\n')
-          : 'No vocabulary suggestions are available in this report.';
-      } else if (query.includes('idiom') || query.includes('phrase')) {
-        const items = (improvements.phrase_upgrades || []).slice(0, 5);
-        answer = items.length
-          ? items.map((item: any) => `- **${item.idiom_or_phrase}** — ${item.meaning}. _"${item.upgraded}"_`).join('\n')
-          : 'No idiom or phrase suggestions are available in this report.';
-      } else if (query.includes('sentence') || query.includes('structure') || query.includes('grammar')) {
-        const items = (improvements.sentence_structure || []).slice(0, 5);
-        answer = items.length
-          ? `| You said | Better |\n| --- | --- |\n${items.map((item: any) => `| ${item.original} | ${item.improved} |`).join('\n')}`
-          : 'No sentence rewrites are available in this report.';
-      } else if (query.includes('tone')) {
-        answer = improvements.tone ? `Your tone was **${improvements.tone.label}** — ${improvements.tone.reason}` : 'No tone feedback is available in this report.';
-      } else {
-        answer = 'Ask about vocabulary, idioms, sentence structure, or tone.';
-      }
-    } else {
-      const chatRes = await askGeminiFollowUp({
+    const chatRes = await askGeminiFollowUp({
         question,
         temperature,
         language: session.language,
@@ -318,9 +293,8 @@ router.post('/:id/ask', authMiddleware, chatRateLimiter, async (req: AuthRequest
         idiomSuggestions: session.report?.idiom_suggestions || [],
         transcript: (session.report?.transcript || '').slice(0, 6000),
         priorMessages: session.chat.slice(-6).map((message) => ({ role: message.role, text: message.text })),
-      });
-      answer = chatRes.answer;
-    }
+    });
+    answer = chatRes.answer;
 
     const userMsg = { role: 'user' as const, text: question, createdAt: new Date() };
     const modelMsg = { role: 'model' as const, text: answer, createdAt: new Date() };
@@ -350,7 +324,6 @@ async function processSessionAsync(opts: {
   language: string;
   goal: string;
   durationSec: number;
-  forceDemo: boolean;
   temperature?: number;
   mode?: 'initial' | 'reevaluate';
 }) {
@@ -363,7 +336,6 @@ async function processSessionAsync(opts: {
     language,
     goal,
     durationSec,
-    forceDemo,
     temperature = 0.7,
     mode = 'initial',
   } = opts;
@@ -374,13 +346,7 @@ async function processSessionAsync(opts: {
     let interactionId: string | undefined = undefined;
     let totalSilenceSec = 3.5;
 
-    if (!isReevaluate && (forceDemo || !filePath || !fs.existsSync(filePath))) {
-      console.log(`[Background Job] Processing session ${sessionId} in DEMO_MODE`);
-      // Simulate 3-second processing delay for demo mode UX
-      await new Promise((r) => setTimeout(r, 3000));
-      report = sampleReportData;
-    } else {
-      if (!filePath || !fs.existsSync(filePath)) {
+    if (!filePath || !fs.existsSync(filePath)) {
         throw new Error('Original recording is no longer available on the server. Please upload the clip again.');
       }
 
@@ -400,9 +366,8 @@ async function processSessionAsync(opts: {
         temperature,
       });
 
-      report = geminiRes.report;
-      interactionId = geminiRes.interactionId;
-    }
+    report = geminiRes.report;
+    interactionId = geminiRes.interactionId;
 
     // 3. Calculate Fluency Index
     const fluency = calculateFluencyIndex({

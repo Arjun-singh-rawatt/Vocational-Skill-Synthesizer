@@ -120,8 +120,6 @@ export function createRouter(intents: unknown, settings: ChatSettings = defaults
     const normalized = normalize(text);
     const words = normalized ? normalized.split(' ') : [];
     if (words.length > settings.maxWords) return null;
-    if (options.hasSession && settings.personalSpeechMarkers.some((marker) => normalized.includes(normalize(marker)))) return null;
-
     for (const intent of validIntents) {
       const when = intent.when || 'any';
       if ((when === 'session' && !options.hasSession) || (when === 'noSession' && options.hasSession)) continue;
@@ -168,6 +166,12 @@ export function getChatUi(): ChatUi {
     chipsAfterAnalysis: [...uiData.chipsAfterAnalysis],
     typingDelayMs: defaults.typingDelayMs,
   };
+}
+
+export function getSuggestionsForIntent(intentId: string | undefined, hasSession: boolean): string[] {
+  const configured = (uiData.suggestionsByIntent as Record<string, string[]> | undefined)?.[intentId || ''];
+  if (configured?.length) return [...configured];
+  return [...(hasSession ? uiData.chipsAfterAnalysis : uiData.fallbackSuggestions)];
 }
 
 export function getNoSessionFallback(): string {

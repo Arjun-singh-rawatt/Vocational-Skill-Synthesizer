@@ -1,5 +1,5 @@
 import chatData from '../data/chatIntents.json';
-import { createRouter, getChatUi, getNoSessionFallback, routeChatMessage, validateIntents } from './chatRouter';
+import { createRouter, getChatUi, getNoSessionFallback, getSuggestionsForIntent, routeChatMessage, validateIntents } from './chatRouter';
 
 describe('chat intent data', () => {
   it('contains valid enabled intents, known placeholders, and no short phrases', () => {
@@ -59,6 +59,15 @@ describe('chat intent data', () => {
     for (const chip of getChatUi().chipsBeforeAnalysis) expect(routeChatMessage(chip, { hasSession: false })).not.toBeNull();
     expect(getNoSessionFallback()).toContain('My Diary');
     expect(getChatUi().typingDelayMs).toBe(350);
+  });
+
+  it('keeps two contextual next-question suggestions available through repeated cycles', () => {
+    expect(getChatUi().chipsBeforeAnalysis).toEqual(['How do I upload a video or audio?', 'How does temperature work?']);
+    expect(getSuggestionsForIntent('how-to-upload', false)).toEqual(['How does temperature work?', 'How do I save vocabulary?']);
+    expect(getSuggestionsForIntent('temperature', false)).toEqual(['How do I re-evaluate my recording?', 'Where can I find my saved phrases?']);
+    expect(getSuggestionsForIntent(undefined, true)).toEqual(getChatUi().chipsAfterAnalysis);
+    expect(routeChatMessage('How do I save vocabulary?', { hasSession: false })?.id).toBe('saved-words-diary');
+    expect(routeChatMessage('How do I re-evaluate my recording?', { hasSession: true })?.id).toBe('reevaluate');
   });
 
   it('allows adding an intent through data and skips malformed entries without throwing', () => {

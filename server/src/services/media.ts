@@ -17,8 +17,7 @@ export interface SilenceDetectResult {
 export async function getMediaDuration(filePath: string): Promise<number> {
   const ffprobePath = ffprobeStatic.path;
   if (!ffprobePath) {
-    console.warn('[Media] ffprobe path not available; falling back to 60s default.');
-    return 60;
+    throw new Error('Media duration could not be checked because ffprobe is unavailable. Please try again later.');
   }
 
   try {
@@ -26,12 +25,11 @@ export async function getMediaDuration(filePath: string): Promise<number> {
     const { stdout } = await execPromise(cmd);
     const duration = parseFloat(stdout.trim());
     if (isNaN(duration) || duration <= 0) {
-      return 60;
+      throw new Error('Unable to read media duration. Please choose a valid audio or video file.');
     }
     return Math.round(duration);
   } catch (err: any) {
-    console.warn(`[Media] ffprobe error: ${err.message}. Defaulting duration to 60s.`);
-    return 60;
+    throw new Error(`Unable to read media duration. Please choose a valid audio or video file. (${err.message})`);
   }
 }
 
