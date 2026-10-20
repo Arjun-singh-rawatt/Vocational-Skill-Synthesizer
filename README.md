@@ -60,7 +60,6 @@ MONGODB_URI=mongodb://127.0.0.1:27017/fluentlens
 JWT_SECRET=super_secret_jwt_key_change_in_production
 CLIENT_URL=http://localhost:5173
 PORT=8080
-DEMO_MODE=false
 MAX_UPLOAD_MB=100
 MAX_CLIP_SECONDS=200
 ```
@@ -94,16 +93,6 @@ Test real media analysis with Gemini via CLI:
 ```bash
 npm run test:gemini --prefix server -- ./path/to/media.mp3
 ```
-
----
-
-## 🎬 How to Test DEMO_MODE (Zero API Key Required)
-
-If you don't have a Gemini API key or want to test offline:
-1. Set `DEMO_MODE=true` in `server/.env`.
-2. OR click the **"⚡ Try Sample Report (Instant Demo Mode)"** button directly on the New Session page in the UI.
-
-The server will skip external API calls and deliver a realistic, validated sample coaching report after a brief delay.
 
 ---
 

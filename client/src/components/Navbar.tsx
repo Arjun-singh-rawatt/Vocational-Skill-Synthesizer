@@ -58,14 +58,14 @@ export const Navbar: React.FC = () => {
   const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : 'A';
 
   return (
-    <header className="sticky top-0 z-50 bg-white border-b border-slate-200/80 shadow-xs">
+    <header className="sticky top-0 z-50 shrink-0 bg-white border-b border-slate-200/80 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           
           {/* LEFT: Logo & Language Selector */}
           <div className="flex items-center gap-4">
             <Link to="/" className="flex items-center gap-2.5 group">
-              <div className="w-9 h-9 rounded-2xl bg-blue-600 flex items-center justify-center shadow-md shadow-blue-600/20 group-hover:scale-105 transition-transform">
+              <div className="w-9 h-9 rounded-2xl bg-brand-600 flex items-center justify-center shadow-md shadow-brand-600/20 group-hover:scale-105 transition-transform">
                 <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
                   <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
@@ -100,7 +100,7 @@ export const Navbar: React.FC = () => {
                         onClick={() => handleSelectLanguage(lang.code)}
                         className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left transition-colors ${
                           selectedLang === lang.code
-                            ? 'bg-indigo-50 text-indigo-700 font-bold'
+                            ? 'bg-brand-50 text-brand-700 font-bold'
                             : 'text-slate-700 hover:bg-slate-50'
                         }`}
                       >
@@ -108,7 +108,7 @@ export const Navbar: React.FC = () => {
                           <span className="text-base leading-none">{lang.flag}</span>
                           <span>{lang.label}</span>
                         </span>
-                        {selectedLang === lang.code && <Check className="w-3.5 h-3.5 text-indigo-600" />}
+                        {selectedLang === lang.code && <Check className="w-3.5 h-3.5 text-brand-600" />}
                       </button>
                     ))}
                   </div>
@@ -130,7 +130,7 @@ export const Navbar: React.FC = () => {
               <div className="relative" ref={profileRef}>
                 <button
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                  className="w-9 h-9 rounded-full bg-blue-600 text-white font-bold text-sm flex items-center justify-center hover:opacity-90 shadow-sm transition-all"
+                  className="w-9 h-9 rounded-full bg-brand-600 text-white font-bold text-sm flex items-center justify-center hover:opacity-90 shadow-sm transition-all"
                   title={user.name}
                 >
                   {userInitial}
@@ -176,7 +176,7 @@ export const Navbar: React.FC = () => {
               </Link>
               <Link
                 to="/register"
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-sm"
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 transition-all shadow-sm"
               >
                 Get Started
               </Link>

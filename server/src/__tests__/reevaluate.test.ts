@@ -25,11 +25,10 @@ describe('reevaluatePreflight', () => {
   const readySession = {
     status: 'done',
     isReevaluating: false,
-    isDemo: false,
     mediaFilename: 'clip-123.webm',
   };
 
-  it('rejects in-progress and demo sessions', () => {
+  it('rejects in-progress sessions', () => {
     expect(reevaluatePreflight({ ...readySession, status: 'processing' }, true)).toMatchObject({
       ok: false,
       status: 409,
@@ -37,10 +36,6 @@ describe('reevaluatePreflight', () => {
     expect(reevaluatePreflight({ ...readySession, isReevaluating: true }, true)).toMatchObject({
       ok: false,
       status: 409,
-    });
-    expect(reevaluatePreflight({ ...readySession, isDemo: true }, true)).toMatchObject({
-      ok: false,
-      status: 400,
     });
   });
 

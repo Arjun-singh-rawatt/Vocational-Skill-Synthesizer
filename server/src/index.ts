@@ -6,7 +6,7 @@ async function main() {
   await connectDB();
 
   app.listen(env.PORT, () => {
-    console.log(`[Server] FluentLens server running on port ${env.PORT} (DEMO_MODE=${env.DEMO_MODE})`);
+    console.log(`[Server] FluentLens server running on port ${env.PORT}`);
   });
 }
 

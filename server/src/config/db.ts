@@ -12,10 +12,7 @@ export async function connectDB(): Promise<typeof mongoose | null> {
     return conn;
   } catch (error) {
     console.error('[MongoDB] Connection error:', error);
-    // Don't kill process immediately in demo mode, but throw error in normal mode
-    if (!env.DEMO_MODE) {
-      console.warn('[MongoDB] Continuing server execution... Note: MongoDB dependent features require database connection.');
-    }
+    console.warn('[MongoDB] Continuing server execution; database dependent features will return errors until MongoDB is available.');
     return null;
   }
 }

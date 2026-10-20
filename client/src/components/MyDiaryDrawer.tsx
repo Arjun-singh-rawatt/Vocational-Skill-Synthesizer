@@ -200,7 +200,7 @@ export const MyDiaryDrawer: React.FC<MyDiaryDrawerProps> = ({ isOpen, onClose })
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {loading ? (
               <div className="py-12 text-center text-slate-400 text-xs">
-                <div className="w-6 h-6 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-2" />
+                <div className="w-6 h-6 border-2 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto mb-2" />
                 Loading diary entries...
               </div>
             ) : filteredWords.length === 0 ? (

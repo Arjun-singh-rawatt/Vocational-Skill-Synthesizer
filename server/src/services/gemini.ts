@@ -2,6 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 import fs from 'fs';
 import { env } from '../config/env';
+import { withGeminiRetry } from './geminiRetry';
 
 export const reportZodSchema = z.object({
   language: z.string(),
@@ -332,10 +333,13 @@ export async function analyzeMediaWithGemini(options: {
   const { mode, guidance } = getTemperatureMode(temperature);
 
   console.log(`[Gemini] Uploading media file (${options.mimeType})...`);
-  const uploadedFile = await ai.files.upload({
-    file: options.filePath,
-    mimeType: options.mimeType,
-  } as any);
+  const uploadedFile = await withGeminiRetry(
+    () => ai.files.upload({
+      file: options.filePath,
+      mimeType: options.mimeType,
+    } as any),
+    'media upload',
+  );
 
   console.log(`[Gemini] Uploaded file name: ${uploadedFile.name}. Polling until ACTIVE...`);
   let activeFile = uploadedFile;
@@ -343,7 +347,10 @@ export async function analyzeMediaWithGemini(options: {
   while ((activeFile as any).state === 'PROCESSING' && attempts < 30) {
     await new Promise((resolve) => setTimeout(resolve, 3000));
     if (uploadedFile.name) {
-      activeFile = await ai.files.get({ name: uploadedFile.name });
+      activeFile = await withGeminiRetry(
+        () => ai.files.get({ name: uploadedFile.name! }),
+        'media processing status check',
+      );
     }
     attempts++;
   }
@@ -386,11 +393,14 @@ Improvements instructions:
       interactionConfig.processing = 'agentic';
     }
 
-    const interaction = await (ai as any).interactions.create({
-      model: env.GEMINI_MODEL,
-      input: interactionInput,
-      config: interactionConfig,
-    });
+    const interaction = await withGeminiRetry<any>(
+      () => (ai as any).interactions.create({
+        model: env.GEMINI_MODEL,
+        input: interactionInput,
+        config: interactionConfig,
+      }),
+      'media analysis',
+    );
 
     interactionId = interaction.id || interaction.interactionId;
     responseText = interaction.text || (interaction.outputs && interaction.outputs[0]?.text) || JSON.stringify(interaction.response);
@@ -401,17 +411,20 @@ Improvements instructions:
     pathUsed = 'generateContent API (Fallback)';
 
     try {
-      const response = await ai.models.generateContent({
-        model: env.GEMINI_MODEL,
-        contents: [
-          { role: 'user', parts: [{ text: COACHING_SYSTEM_INSTRUCTION + '\n\n' + prompt }, { fileData: { fileUri: (activeFile as any).uri || '', mimeType: (activeFile as any).mimeType || options.mimeType } }] }
-        ],
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: JSON.parse(REPORT_SCHEMA_JSON_STRING),
-          temperature,
-        }
-      });
+      const response = await withGeminiRetry(
+        () => ai.models.generateContent({
+          model: env.GEMINI_MODEL,
+          contents: [
+            { role: 'user', parts: [{ text: COACHING_SYSTEM_INSTRUCTION + '\n\n' + prompt }, { fileData: { fileUri: (activeFile as any).uri || '', mimeType: (activeFile as any).mimeType || options.mimeType } }] }
+          ],
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: JSON.parse(REPORT_SCHEMA_JSON_STRING),
+            temperature,
+          }
+        }),
+        'fallback media analysis',
+      );
 
       responseText = response.text || '';
     } catch (fallbackErr: any) {
@@ -454,15 +467,18 @@ Please fix it and return ONLY valid JSON matching the exact schema required.
 Invalid output:
 ${typeof invalidText === 'string' ? invalidText : JSON.stringify(invalidText)}`;
 
-  const response = await ai.models.generateContent({
-    model: env.GEMINI_MODEL,
-    contents: [{ role: 'user', parts: [{ text: retryPrompt }] }],
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: JSON.parse(REPORT_SCHEMA_JSON_STRING),
-      temperature,
-    }
-  });
+  const response = await withGeminiRetry(
+    () => ai.models.generateContent({
+      model: env.GEMINI_MODEL,
+      contents: [{ role: 'user', parts: [{ text: retryPrompt }] }],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: JSON.parse(REPORT_SCHEMA_JSON_STRING),
+        temperature,
+      }
+    }),
+    'report formatting retry',
+  );
 
   const rawJson = JSON.parse(cleanJsonResponse(response.text || '{}'));
   const parsed = reportZodSchema.parse(rawJson); // throws if still invalid
@@ -470,53 +486,59 @@ ${typeof invalidText === 'string' ? invalidText : JSON.stringify(invalidText)}`;
 }
 
 export async function askGeminiFollowUp(options: {
-  interactionId?: string;
   question: string;
+  temperature: number;
+  language: string;
+  goal: string;
+  detectedLevel: string;
+  improvements: unknown;
+  vocabularySuggestions: unknown;
+  idiomSuggestions: unknown;
   transcript: string;
-  reportSummary: string;
-}): Promise<{ answer: string; isFallback: boolean }> {
+  priorMessages: Array<{ role: 'user' | 'model'; text: string }>;
+}): Promise<{ answer: string; isFallback: false }> {
   const ai = getGeminiClient();
+  const temperature = Math.max(0, Math.min(1, options.temperature));
+  const { mode, guidance } = getTemperatureMode(temperature);
+  const systemInstruction = `You are a concise spoken-language coach. Follow these numbered instructions exactly:
+1. Answer ONLY what the user asked. If they ask for vocabulary, give vocabulary only: no recap of the recording, no commentary on other aspects, and no closing remarks.
+2. Use a maximum of 120 words in total, excluding table cells. At most one short intro line under 15 words, and no outro.
+3. Never write paragraphs. Use ONLY these formats:
+   - Vocabulary, idioms, phrases, or word corrections: markdown bullets, one line each, in the form - **word or phrase** — short meaning. _"short example"_. Bold ONLY the target word or phrase, nothing else.
+   - Rewrites of sentences: a markdown table with columns "You said" | "Better".
+   - Comparisons or 3+ attributes: a markdown table.
+   - Any other question: at most 3 short bullets.
+4. Default to 5 items. If the user asks for a number, honor it up to 10.
+5. Do NOT mention timestamps (mm:ss) unless the user asks where something was said; in that case add a "Time" column.
+6. Prefer items from SESSION DATA first. If the user asks for "more", create NEW items in the target language that are NOT already given in SESSION DATA or earlier in this conversation, matching the speaker's CEFR level or one level higher.
+7. If the question is unrelated to the user's speaking practice, reply with one line redirecting them, nothing else.
+8. Never invent things the speaker did not say. If you cannot answer from the data, say so in one line.
+9. Write in English for explanations; target-language words and examples stay in the target language.
 
-  if (options.interactionId) {
-    try {
-      console.log(`[Gemini Chat] Sending question using interactionId: ${options.interactionId}`);
-      const interaction = await (ai as any).interactions.create({
-        model: env.GEMINI_MODEL,
-        input: options.question,
-        previous_interaction_id: options.interactionId,
-        config: {
-          systemInstruction: 'Answer only about this recording, quoting the user and citing mm:ss timestamps if relevant.',
-        },
-      });
+Temperature mode: ${mode}. Language guidance: ${guidance}
 
-      const answer = interaction.text || (interaction.outputs && interaction.outputs[0]?.text) || 'No response generated.';
-      return { answer, isFallback: false };
-    } catch (err: any) {
-      console.warn(`[Gemini Chat] Interactions API chat failed (${err.message}). Falling back to text context prompt...`);
-    }
-  }
+SESSION DATA
+Target language: ${options.language}
+Goal: ${options.goal}
+CEFR level: ${options.detectedLevel}
+Improvements: ${JSON.stringify(options.improvements)}
+Vocabulary suggestions: ${JSON.stringify(options.vocabularySuggestions)}
+Idiom suggestions: ${JSON.stringify(options.idiomSuggestions)}
+Transcript (first 6000 characters): ${options.transcript}`;
+  const contents = [
+    ...options.priorMessages.map((message) => ({ role: message.role, parts: [{ text: message.text }] })),
+    { role: 'user', parts: [{ text: options.question }] },
+  ];
+  const response = await withGeminiRetry(
+    () => ai.models.generateContent({
+      model: env.GEMINI_MODEL,
+      contents,
+      config: { systemInstruction, temperature, maxOutputTokens: 400 },
+    }),
+    'follow-up response',
+  );
 
-  // Fallback text context model call
-  console.log('[Gemini Chat] Executing fallback text-based chat response');
-  const fallbackPrompt = `You are an AI language coach reviewing a previous speaking recording session.
-Note: The original media session context is no longer active. Use the transcript and report summary below to answer the user's question accurately.
-Always cite mm:ss timestamps when referring to specific parts of the transcript.
-
-Transcript:
-"${options.transcript}"
-
-Report Summary:
-"${options.reportSummary}"
-
-User Question: "${options.question}"`;
-
-  const response = await ai.models.generateContent({
-    model: env.GEMINI_MODEL,
-    contents: [{ role: 'user', parts: [{ text: fallbackPrompt }] }],
-  });
-
-  const answer = (response.text || '') + '\n\n*(Note: Answer generated from saved transcript context as original media session has expired.)*';
-  return { answer, isFallback: true };
+  return { answer: (response.text || '').trim(), isFallback: false };
 }
 
 async function cleanupGeminiFile(ai: GoogleGenAI, fileName: string) {

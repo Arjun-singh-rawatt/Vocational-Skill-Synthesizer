@@ -6,7 +6,6 @@ import { env } from '../src/config/env';
 async function main() {
   console.log('=== FluentLens Gemini Service Verification Script ===');
   console.log(`GEMINI_MODEL: ${env.GEMINI_MODEL}`);
-  console.log(`DEMO_MODE: ${env.DEMO_MODE}`);
 
   const samplePath = process.argv[2];
   if (!samplePath || !fs.existsSync(samplePath)) {
