@@ -5,14 +5,7 @@ import { Flame, ChevronDown, LogOut, User as UserIcon, Check } from 'lucide-reac
 
 const LANGUAGES = [
   { code: 'English', label: 'English', flag: '🇬🇧' },
-  { code: 'Spanish', label: 'Spanish', flag: '🇪🇸' },
-  { code: 'French', label: 'French', flag: '🇫🇷' },
-  { code: 'German', label: 'German', flag: '🇩🇪' },
-  { code: 'Mandarin Chinese', label: 'Mandarin Chinese', flag: '🇨🇳' },
   { code: 'Japanese', label: 'Japanese', flag: '🇯🇵' },
-  { code: 'Italian', label: 'Italian', flag: '🇮🇹' },
-  { code: 'Portuguese', label: 'Portuguese', flag: '🇵🇹' },
-  { code: 'Hindi', label: 'Hindi', flag: '🇮🇳' },
 ];
 
 export const Navbar: React.FC = () => {
@@ -20,7 +13,8 @@ export const Navbar: React.FC = () => {
   const navigate = useNavigate();
 
   const [selectedLang, setSelectedLang] = useState(() => {
-    return localStorage.getItem('fluentlens_selected_lang') || 'English';
+    const saved = localStorage.getItem('fluentlens_selected_lang');
+    return LANGUAGES.some((language) => language.code === saved) ? saved! : 'English';
   });
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -123,7 +117,7 @@ export const Navbar: React.FC = () => {
               {/* Streak indicator */}
               <div className="flex items-center gap-1.5 text-slate-700 text-xs sm:text-sm font-semibold">
                 <Flame className="w-4 h-4 fill-amber-500 text-amber-500" />
-                <span>{user.currentStreak || 12} day streak</span>
+                <span>{user.currentStreak ?? 0} day streak</span>
               </div>
 
               {/* Profile Avatar */}

@@ -2,14 +2,15 @@ import { Router, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import mongoose from 'mongoose';
 import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
-import { chatRateLimiter, sessionRateLimiter } from '../middleware/rateLimiter';
+import { reevaluateRateLimiter, sessionRateLimiter } from '../middleware/rateLimiter';
 import { Session } from '../models/Session';
 import { User } from '../models/User';
 import { env } from '../config/env';
 import { getMediaDuration, detectAudioSilence } from '../services/media';
-import { analyzeMediaWithGemini, askGeminiFollowUp } from '../services/gemini';
+import { analyzeMediaWithGemini, createCreativeRewrite, reimproveFromTranscript } from '../services/gemini';
 import { calculateFluencyIndex } from '../services/fluency';
 import { calculateStreak } from '../services/streak';
 import { checkAndMarkSavedWordsLearned } from '../services/vocab';
@@ -62,7 +63,8 @@ const upload = multer({
 });
 
 const createSessionSchema = z.object({
-  language: z.string().min(1, 'Target language is required'),
+  language: z.enum(['English', 'Japanese'], { errorMap: () => ({ message: 'Language must be English or Japanese.' }) }),
+  level: z.string().optional(),
   goal: z.enum(['conversation', 'interview', 'ielts', 'presentation']),
   temperature: z.string().optional(),
 });
@@ -79,6 +81,8 @@ router.post('/', authMiddleware, sessionRateLimiter, upload.single('file'), asyn
     }
 
     const { language, goal, temperature } = parseResult.data;
+    const level = parseResult.data.level || (language === 'Japanese' ? 'N5' : 'B1');
+    if (!(language === 'Japanese' ? ['N5','N4','N3','N2','N1'] : ['A1','A2','B1','B2','C1','C2']).includes(level)) return res.status(400).json({ error: `Level ${level} is not valid for ${language}.` });
     let tempNum = 0.7;
     if (temperature !== undefined) {
       const parsed = parseFloat(temperature);
@@ -111,6 +115,7 @@ router.post('/', authMiddleware, sessionRateLimiter, upload.single('file'), asyn
     const session = await Session.create({
       userId: req.userId,
       language,
+      level,
       goal,
       mediaType,
       durationSec,
@@ -138,6 +143,7 @@ router.post('/', authMiddleware, sessionRateLimiter, upload.single('file'), asyn
       mimeType,
       mediaType,
       language,
+      level,
       goal,
       durationSec,
       temperature: tempNum,
@@ -162,6 +168,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
 // GET /api/sessions/:id
 router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid session id.' });
   try {
     const session = await Session.findOne({ _id: req.params.id, userId: req.userId });
     if (!session) {
@@ -173,143 +180,35 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 });
 
-const askSchema = z.object({
-  question: z.string().min(1, 'Question cannot be empty'),
-  temperature: z.number().min(0).max(1).default(0.7),
-});
-
-const reevaluateSchema = z.object({
-  temperature: z.number().min(0).max(1),
-});
-
-// POST /api/sessions/:id/reevaluate
-router.post('/:id/reevaluate', authMiddleware, sessionRateLimiter, async (req: AuthRequest, res: Response) => {
+const reevaluateSchema = z.object({ transcript: z.string().trim().min(1).max(8000).optional(), level: z.string().optional(), temperature: z.number().min(0).max(1).optional() });
+router.post('/:id/reevaluate', authMiddleware, reevaluateRateLimiter, async (req: AuthRequest, res: Response) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid session id.' });
+  const parsed = reevaluateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
   try {
-    const parseResult = reevaluateSchema.safeParse(req.body);
-    if (!parseResult.success) {
-      return res.status(400).json({ error: parseResult.error.errors[0].message });
-    }
-
-    const temperature = Math.min(1, Math.max(0, parseResult.data.temperature));
-    const uploadDir = getUploadsDir(__dirname);
-
     const session = await Session.findOne({ _id: req.params.id, userId: req.userId });
-    if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
-    }
-
-    const fileExists = originalMediaExists(uploadDir, session.mediaFilename);
-    const preflight = reevaluatePreflight(session, fileExists);
-    if (!preflight.ok) {
-      return res.status(preflight.status).json({ error: preflight.error });
-    }
-
-    const locked = await Session.findOneAndUpdate(
-      {
-        _id: session._id,
-        userId: req.userId,
-        status: 'done',
-        isReevaluating: { $ne: true },
-      },
-      {
-        $set: {
-          isReevaluating: true,
-          temperature,
-        },
-        $unset: { errorMessage: 1 },
-      },
-      { new: true }
-    );
-
-    if (!locked) {
-      return res.status(409).json({ error: 'Evaluation already in progress' });
-    }
-
-    let filePath: string;
-    try {
-      filePath = resolveSessionMediaPath(uploadDir, locked.mediaFilename);
-    } catch (pathErr: any) {
-      await Session.findByIdAndUpdate(locked._id, {
-        isReevaluating: false,
-        errorMessage: pathErr.message || 'Original media is not available for this session.',
-      });
-      return res.status(400).json({ error: pathErr.message || 'Original media is not available for this session.' });
-    }
-
-    res.status(202).json({
-      id: locked._id.toString(),
-      status: 'evaluating',
-    });
-
-    processSessionAsync({
-      sessionId: locked._id.toString(),
-      userId: req.userId!,
-      filePath,
-      mimeType: locked.mimeType || 'audio/webm',
-      mediaType: locked.mediaType,
-      language: locked.language,
-      goal: locked.goal,
-      durationSec: locked.durationSec,
-      temperature,
-      mode: 'reevaluate',
-    }).catch((err) => {
-      console.error(`[Reevaluate Job Error] Session ${locked._id}:`, err);
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to re-evaluate session' });
-  }
-});
-
-// POST /api/sessions/:id/ask
-router.post('/:id/ask', authMiddleware, chatRateLimiter, async (req: AuthRequest, res: Response) => {
-  try {
-    const parseResult = askSchema.safeParse(req.body);
-    if (!parseResult.success) {
-      return res.status(400).json({ error: parseResult.error.errors[0].message });
-    }
-
-    const { question, temperature } = parseResult.data;
-
-    const session = await Session.findOne({ _id: req.params.id, userId: req.userId });
-    if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
-    }
-
-    if (session.status !== 'done') {
-      return res.status(400).json({ error: 'Session report is not yet ready for follow-up questions' });
-    }
-
-    let answer = '';
-    const isFallback = false;
-
-    const chatRes = await askGeminiFollowUp({
-        question,
-        temperature,
-        language: session.language,
-        goal: session.goal,
-        detectedLevel: session.report?.detected_level || 'unknown',
-        improvements: session.report?.improvements || {},
-        vocabularySuggestions: session.report?.vocabulary_suggestions || [],
-        idiomSuggestions: session.report?.idiom_suggestions || [],
-        transcript: (session.report?.transcript || '').slice(0, 6000),
-        priorMessages: session.chat.slice(-6).map((message) => ({ role: message.role, text: message.text })),
-    });
-    answer = chatRes.answer;
-
-    const userMsg = { role: 'user' as const, text: question, createdAt: new Date() };
-    const modelMsg = { role: 'model' as const, text: answer, createdAt: new Date() };
-
-    session.chat.push(userMsg, modelMsg);
-    await session.save();
-
-    res.status(200).json({
-      answer,
-      isFallback,
-      chat: session.chat,
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to process follow-up question' });
-  }
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+    if (session.status === 'processing' || session.isReevaluating) return res.status(409).json({ error: 'Evaluation already in progress' });
+    if (session.status !== 'done' || !session.report) return res.status(400).json({ error: 'Session report is not ready.' });
+    const transcript = parsed.data.transcript ?? session.report.transcript;
+    const level = parsed.data.level ?? session.level;
+    const levels = session.language === 'Japanese' ? ['N5','N4','N3','N2','N1'] : ['A1','A2','B1','B2','C1','C2'];
+    if (!levels.includes(level)) return res.status(400).json({ error: 'Level is not valid for this language.' });
+    const temperature = parsed.data.temperature ?? session.temperature ?? 0.7;
+    const locked = await Session.findOneAndUpdate({ _id: session._id, status: 'done', isReevaluating: { $ne: true } }, { $set: { isReevaluating: true, status: 'processing', temperature, level }, $unset: { errorMessage: 1 } }, { new: true });
+    if (!locked) return res.status(409).json({ error: 'Evaluation already in progress' });
+    res.status(202).json({ id: session._id.toString(), status: 'evaluating' });
+    void (async () => { try {
+      const tone = session.report!.improvements.tone;
+      const improved = await reimproveFromTranscript({ transcript, language: session.language, level, goal: session.goal, tone });
+      let creative = null;
+      try { creative = await createCreativeRewrite({ transcript, language: session.language, level, tone: tone.label, temperature }); } catch (error) { console.error('[Creative Rewrite] Failed:', error); }
+      const oldReport: any = { ...session.report! };
+      const report = { ...oldReport, transcript, improved_transcript: improved.improved_transcript, improvements: { ...oldReport.improvements, ...improved.improvements, tone, creative_rewrite: creative } };
+      const fluency = calculateFluencyIndex({ transcript, durationSec: session.durationSec, totalSilenceSec: session.durationSec * (session.fluency?.pauseRatio || 0), geminiFillers: report.filler_words_detected || [], language: session.language });
+      await Session.findByIdAndUpdate(session._id, { $set: { report, fluency, level, temperature, status: 'done', isReevaluating: false }, $unset: { errorMessage: 1 } });
+    } catch (error: any) { await Session.findByIdAndUpdate(session._id, { $set: { status: 'done', isReevaluating: false, errorMessage: error.message || 'Re-evaluation failed' } }); } })();
+  } catch (error: any) { res.status(500).json({ error: error.message || 'Failed to re-evaluate session' }); }
 });
 
 /**
@@ -322,6 +221,7 @@ async function processSessionAsync(opts: {
   mimeType: string;
   mediaType: 'video' | 'audio';
   language: string;
+  level: string;
   goal: string;
   durationSec: number;
   temperature?: number;
@@ -334,6 +234,7 @@ async function processSessionAsync(opts: {
     mimeType,
     mediaType,
     language,
+    level,
     goal,
     durationSec,
     temperature = 0.7,
@@ -361,12 +262,14 @@ async function processSessionAsync(opts: {
         filePath,
         mimeType,
         targetLanguage: language,
+      level,
         goal,
         mediaType,
         temperature,
       });
 
     report = geminiRes.report;
+    try { report.improvements.creative_rewrite = await createCreativeRewrite({ transcript: report.transcript, language, level, tone: report.improvements.tone.label, temperature }); } catch (error) { console.error('[Creative Rewrite] Failed:', error); report.improvements.creative_rewrite = null; }
     interactionId = geminiRes.interactionId;
 
     // 3. Calculate Fluency Index
@@ -406,6 +309,7 @@ async function processSessionAsync(opts: {
     // 6. Save Session as "done" (keep original local media for later re-evaluation)
     await Session.findByIdAndUpdate(sessionId, {
       $set: {
+        ...(isReevaluate ? {} : { originalTranscript: report.transcript }),
         status: 'done',
         report,
         fluency,

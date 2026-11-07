@@ -114,18 +114,21 @@
     "vocabulary_upgrades": [
       {
         "word": "Pivot",
+        "reading": "ぴぼっと",
         "meaning": "To rapidly adapt or change strategic orientation in response to circumstances.",
         "example": "Our engineering team had to pivot quickly when client requirements shifted.",
         "replaces": "change quickly"
       },
       {
         "word": "Rewarding",
+        "reading": "りわーでぃんぐ",
         "meaning": "Providing substantial satisfaction, value, and professional fulfillment.",
         "example": "Tackling complex engineering challenges has been exceptionally rewarding.",
         "replaces": "really exciting"
       },
       {
         "word": "Rigorous",
+        "reading": "りごらす",
         "meaning": "Demanding high precision, adherence to strict standards, and resilience under pressure.",
         "example": "We maintained rigorous standards despite challenging project timelines.",
         "replaces": "tight"
@@ -160,6 +163,16 @@
     "tone": {
       "label": "enthusiastic",
       "reason": "Delivery conveys genuine passion for software engineering, with slight vocal hesitation during initial transitions."
+    },
+    "creative_rewrite": {
+      "items": [
+        {
+          "original": "It has been really exciting.",
+          "rewrite": "Honestly, it has been a pretty exciting ride!",
+          "style_note": "Adds an upbeat, conversational touch."
+        }
+      ],
+      "tone_used": "enthusiastic"
     }
   }
 }

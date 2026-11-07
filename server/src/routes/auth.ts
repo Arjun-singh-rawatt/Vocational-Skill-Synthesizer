@@ -42,7 +42,7 @@ router.post('/register', async (req: Request, res: Response) => {
     const token = jwt.sign({ userId: user._id.toString() }, env.JWT_SECRET, { expiresIn: '7d' });
     return res.status(201).json({ token, user: formatUser(user) });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Registration failed' });
+    return res.status(mongoose.connection.readyState === 1 ? 500 : 503).json({ error: mongoose.connection.readyState === 1 ? (err.message || 'Registration failed') : 'Account service is unavailable because the database is disconnected.' });
   }
 });
 
@@ -56,7 +56,7 @@ router.post('/login', async (req: Request, res: Response) => {
     const token = jwt.sign({ userId: user._id.toString() }, env.JWT_SECRET, { expiresIn: '7d' });
     return res.status(200).json({ token, user: formatUser(user) });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Login failed' });
+    return res.status(mongoose.connection.readyState === 1 ? 500 : 503).json({ error: mongoose.connection.readyState === 1 ? (err.message || 'Login failed') : 'Account service is unavailable because the database is disconnected.' });
   }
 });
 
@@ -67,7 +67,7 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!user) return res.status(404).json({ error: 'User account was not found.' });
     return res.status(200).json({ user: formatUser(user) });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Failed to fetch user' });
+    return res.status(mongoose.connection.readyState === 1 ? 500 : 503).json({ error: mongoose.connection.readyState === 1 ? (err.message || 'Failed to fetch user') : 'Account service is unavailable because the database is disconnected.' });
   }
 });
 
