@@ -15,10 +15,11 @@ app.use(
   cors({
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps, curl, postman) or matching CLIENT_URL
-      if (!origin || origin === env.CLIENT_URL || env.CLIENT_URL === '*') {
+      const allowedOrigins = env.CLIENT_URL.split(',').map((value) => value.trim()).filter(Boolean);
+      if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(null, true); // Permissive in dev if needed, or strictly allow env.CLIENT_URL
+        callback(new Error('Origin is not allowed by CORS'));
       }
     },
     credentials: true,

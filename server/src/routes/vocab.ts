@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import mongoose from 'mongoose';
 import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { VocabWord } from '../models/VocabWord';
@@ -61,6 +62,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
 // DELETE /api/vocab/:id
 router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid vocabulary id.' });
   try {
     const result = await VocabWord.findOneAndDelete({ _id: req.params.id, userId: req.userId });
     if (!result) {

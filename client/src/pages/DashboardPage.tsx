@@ -3,9 +3,10 @@ import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { MyDiaryDrawer } from '../components/MyDiaryDrawer';
 import { PhrasesDrawer } from '../components/PhrasesDrawer';
+import { PracticeCalendar } from '../components/PracticeCalendar';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { getChatUi, routeChatMessage, getSuggestionsForIntent } from '../lib/chatRouter';
+import { getMenu, resolveReply, formatReportSection, chatMenuSettings } from '../lib/chatMenu';
 import { ALLOWED_AUDIO_FORMATS, ALLOWED_VIDEO_FORMATS, MAX_FILE_SIZE_MB } from '../data/uploadLimits';
 import {
   Sparkles,
@@ -13,8 +14,6 @@ import {
   Mic,
   Upload,
   BarChart2,
-  Calendar as CalendarIcon,
-  ChevronLeft,
   ChevronRight,
   Send,
   Thermometer,
@@ -76,16 +75,21 @@ const TONE_CONFIG: Record<string, { bg: string; text: string; border: string; em
 
 export const DashboardPage: React.FC = () => {
   const { user } = useAuth();
-  const chatUi = getChatUi();
+
 
   // Selected language state (synced with Navbar)
   const [selectedLanguage, setSelectedLanguage] = useState(() => {
-    return localStorage.getItem('fluentlens_selected_lang') || 'English';
+    const saved = localStorage.getItem('fluentlens_selected_lang');
+    return ['English', 'Japanese'].includes(saved || '') ? saved! : 'English';
   });
+  const [selectedLevel, setSelectedLevel] = useState(() => selectedLanguage === 'Japanese' ? 'N5' : 'B1');
+  const levelOptions = selectedLanguage === 'Japanese' ? ['N5', 'N4', 'N3', 'N2', 'N1'] : ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+  useEffect(() => { try { const saved = localStorage.getItem(`fluentlens.level.${selectedLanguage}`); setSelectedLevel(saved && levelOptions.includes(saved) ? saved : (selectedLanguage === 'Japanese' ? 'N5' : 'B1')); } catch { setSelectedLevel(selectedLanguage === 'Japanese' ? 'N5' : 'B1'); } }, [selectedLanguage]);
 
   useEffect(() => {
     const handleLangChange = (e: any) => {
       setSelectedLanguage(e.detail || 'English');
+      setSelectedLevel(e.detail === 'Japanese' ? 'N5' : 'B1');
     };
     window.addEventListener('fluentlens_lang_change', handleLangChange);
     return () => window.removeEventListener('fluentlens_lang_change', handleLangChange);
@@ -103,12 +107,13 @@ export const DashboardPage: React.FC = () => {
   const [savingReportItems, setSavingReportItems] = useState<Set<string>>(new Set());
   const [reportSaveError, setReportSaveError] = useState<string | null>(null);
   const [submittedTemperature, setSubmittedTemperature] = useState<number | null>(null);
+  const [scriptText, setScriptText] = useState('');
 
   // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [inputMessage, setInputMessage] = useState('');
+  const [chatMenuId, setChatMenuId] = useState(chatMenuSettings.rootMenu || 'root');
+  const activeChatMenu = getMenu(chatMenuId, { hasSession: phase === 'done' && latestSession?.status === 'done' });
   const [isSendingChat, setIsSendingChat] = useState(false);
-  const [chatSuggestions, setChatSuggestions] = useState<string[]>(chatUi.chipsBeforeAnalysis);
   const [temperature, setTemperature] = useState(0.7);
   const [chatWidth, setChatWidth] = useState(() => {
     try {
@@ -266,50 +271,17 @@ export const DashboardPage: React.FC = () => {
     setIsRecording(false);
   };
 
-  const handleSendChatMessage = async (messageText = inputMessage) => {
-    if (!messageText.trim() || sendingChatRef.current) return;
-    const hasCompletedSession = phase === 'done' && latestSession?.status === 'done';
-    const localReply = routeChatMessage(messageText, { hasSession: hasCompletedSession });
-    setChatSuggestions(getSuggestionsForIntent(localReply?.id, hasCompletedSession));
-    const query = messageText.trim();
-    const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    const userMsg: ChatMessage = { role: 'user', text: query, timestamp: nowStr };
-    sendingChatRef.current = true;
-    setChatMessages((prev) => [...prev, userMsg]);
-    setInputMessage('');
+  const handleMenuOption = async (option: any) => {
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setChatMessages((messages) => [...messages, { role: 'user', text: option.label, timestamp: now }]);
+    if (option.type === 'menu') { setChatMenuId(option.target); setChatMessages((messages) => [...messages, { role: 'assistant', text: getMenu(option.target, { hasSession: canChat }).prompt, timestamp: now }]); return; }
+    let reply = option.type === 'report' ? formatReportSection(option.section, latestSession?.report) : resolveReply(option, { hasSession: canChat, temperature, level: selectedLevel, language: selectedLanguage });
+    if (option.action === 'openDiary') setIsDiaryOpen(true);
+    if (option.action === 'openPhrases') setIsPhrasesOpen(true);
+    if (option.next) setChatMenuId(option.next);
+    const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : chatMenuSettings.typingDelayMs || 300;
     setIsSendingChat(true);
-
-    try {
-      if (!hasCompletedSession || localReply) {
-        const reply = localReply?.reply || (hasCompletedSession
-          ? 'I could not find a quick guide for that. Ask about your report, temperature, saved vocabulary, or phrases.'
-          : 'Please upload or record a video or audio first. Then I can give feedback on your own speaking. You can find saved vocabulary in My Diary.');
-        setChatMessages((prev) => [
-          ...prev,
-          { role: 'assistant', text: reply, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
-        ]);
-      } else {
-        const res = await api.sessions.ask(latestSession._id, query, temperature);
-        setChatMessages((prev) => [
-          ...prev,
-          { role: 'assistant', text: res.answer || chatUi.emptyAnswerFallback, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
-        ]);
-        setChatSuggestions(chatUi.chipsAfterAnalysis);
-      }
-    } catch (err: any) {
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          role: 'error',
-          text: err.message || 'The request failed. Please try again.',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        },
-      ]);
-    } finally {
-      sendingChatRef.current = false;
-      setIsSendingChat(false);
-    }
+    window.setTimeout(() => { setChatMessages((messages) => [...messages, { role: 'assistant', text: reply, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]); setIsSendingChat(false); }, delay);
   };
 
   const selectUploadFile = (file?: File, type: 'video' | 'audio' = mediaType) => {
@@ -354,6 +326,7 @@ export const DashboardPage: React.FC = () => {
     }
 
     setLatestSession(session);
+    setScriptText(session.report?.transcript || '');
     if (session.report?.improvements) {
       setImprovements(session.report.improvements);
     }
@@ -371,7 +344,7 @@ export const DashboardPage: React.FC = () => {
     setIsReevaluating(true);
 
     try {
-      await api.sessions.reevaluate(latestSession._id, temperature);
+      await api.sessions.reevaluate(latestSession._id, { temperature, level: selectedLevel, transcript: scriptText });
       reevalPollRef.current = setInterval(async () => {
         try {
           const session = await api.sessions.get(latestSession._id);
@@ -392,6 +365,7 @@ export const DashboardPage: React.FC = () => {
 
   const handleSubmitSession = async () => {
     setChatMessages([]);
+    setChatMenuId(chatMenuSettings.rootMenu || 'root');
     setLatestSession(null);
     setSubmitError(null);
     setReevalError(null);
@@ -411,6 +385,7 @@ export const DashboardPage: React.FC = () => {
     try {
       const formData = new FormData();
       formData.append('language', selectedLanguage);
+      formData.append('level', selectedLevel);
       formData.append('goal', 'interview');
       formData.append('temperature', temperature.toString());
 
@@ -432,6 +407,7 @@ export const DashboardPage: React.FC = () => {
             clearInterval(pollInterval);
             setIsSubmitting(false);
             setLatestSession(session);
+            setScriptText(session.report?.transcript || '');
             if (session.report?.improvements) {
               setImprovements(session.report.improvements);
             }
@@ -459,6 +435,7 @@ export const DashboardPage: React.FC = () => {
 
   const handleResetToIdle = () => {
     setChatMessages([]);
+    setChatMenuId(chatMenuSettings.rootMenu || 'root');
     setLatestSession(null);
     setPhase('idle');
     setImprovements(null);
@@ -505,9 +482,9 @@ export const DashboardPage: React.FC = () => {
 
   const getTemperatureModeText = (temp: number | null): string => {
     if (temp === null || temp === undefined) return '';
-    if (temp < 0.35) return `Accurate mode (${temp.toFixed(2)})`;
-    if (temp <= 0.7) return `Balanced mode (${temp.toFixed(2)})`;
-    return `Creative mode (${temp.toFixed(2)})`;
+    if (temp < 0.35) return `Plain (${temp.toFixed(2)})`;
+    if (temp <= 0.7) return `Lively (${temp.toFixed(2)})`;
+    return `Playful (${temp.toFixed(2)})`;
   };
 
   const reportItemKey = (kind: 'word' | 'phrase', value: string) => `${kind}:${value.trim().toLocaleLowerCase()}`;
@@ -555,7 +532,6 @@ export const DashboardPage: React.FC = () => {
   }, [latestSession?._id]);
 
   // Calendar calculations
-  const activeDaysCount = progressData?.currentStreak || 12;
   const isCompact = phase === 'analyzing' || phase === 'done';
   const vocabularyReportItems = [
     ...(improvements?.vocabulary_upgrades || []),
@@ -572,6 +548,7 @@ export const DashboardPage: React.FC = () => {
     })),
   ].filter((item, index, all) => all.findIndex((candidate) => candidate.idiom_or_phrase?.toLocaleLowerCase() === item.idiom_or_phrase?.toLocaleLowerCase()) === index);
   const canChat = phase === 'done' && latestSession?.status === 'done';
+  const hasPendingChanges = Boolean(latestSession?._id && (scriptText !== (latestSession.report?.transcript || '') || selectedLevel !== latestSession.level || temperature !== (latestSession.temperature ?? 0.7)));
   const chatMaxWidth = chatWidthBounds().max;
 
   return (
@@ -599,14 +576,14 @@ export const DashboardPage: React.FC = () => {
                 <div className="w-7 h-7 rounded-lg bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600">
                   <Sparkles className="w-3.5 h-3.5" />
                 </div>
-                <h2 className="text-sm font-bold text-slate-900">AI Chatbot</h2>
+                <h2 className="text-sm font-bold text-slate-900">{chatMenuSettings.chatTitle}</h2>
                 </div>
-              <button type="button" onClick={() => { setChatMessages([]); setChatSuggestions(canChat ? chatUi.chipsAfterAnalysis : chatUi.chipsBeforeAnalysis); }} aria-label="Clear chat" title="Clear chat" className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+              <button type="button" onClick={() => { setChatMessages([]); setChatMenuId(chatMenuSettings.rootMenu || 'root'); }} aria-label={chatMenuSettings.clearLabel} title={chatMenuSettings.clearLabel} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
               <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">
-                {chatUi.headerHint}
+                {activeChatMenu.prompt}
               </p>
             </div>
 
@@ -614,7 +591,7 @@ export const DashboardPage: React.FC = () => {
             <div className="max-h-[170px] xl:max-h-[210px] overflow-y-auto py-2 space-y-2 pr-1 thin-scrollbar">
               {chatMessages.length === 0 && (
                 <div className="min-h-[44px] flex flex-col items-center justify-center text-center gap-2 py-2">
-                  <p className="text-[11px] text-slate-400">{canChat ? chatUi.hintAfterAnalysis : chatUi.hintBeforeAnalysis}</p>
+                  <p className="text-[11px] text-slate-400">{canChat ? chatMenuSettings.emptyHintAfterAnalysis : chatMenuSettings.emptyHintBeforeAnalysis}</p>
                 </div>
               )}
               {chatMessages.map((msg, idx) => (
@@ -661,27 +638,14 @@ export const DashboardPage: React.FC = () => {
               <div ref={chatBottomRef} />
             </div>
 
-            {/* Input & Send Bar */}
-            <div className="pt-2 border-t border-slate-100">
-              <div className="flex flex-wrap justify-center gap-1.5 pb-2">
-                {chatSuggestions.map((quickReply) => <button key={quickReply} type="button" disabled={isSendingChat} onClick={() => void handleSendChatMessage(quickReply)} className="rounded-full border border-brand-100 bg-brand-50 px-2.5 py-1 text-[10px] font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-50">{quickReply}</button>)}
-              </div>
-              <div className="relative flex items-center">
-                <input
-                  type="text"
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleSendChatMessage(); } }}
-                  placeholder="Ask a question…"
-                  className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-full pl-3.5 pr-10 py-1.5 text-[11px] text-slate-800 placeholder-slate-400 focus:outline-none focus:border-brand-500 transition-colors"
-                />
-                <button
-                  onClick={() => void handleSendChatMessage()}
-                  disabled={!inputMessage.trim() || isSendingChat}
-                  className="absolute right-1 p-1.5 rounded-full bg-brand-600 hover:bg-brand-700 text-white transition-all disabled:opacity-40"
-                >
-                  <Send className="w-3 h-3" />
-                </button>
+            {/* Menu options */}
+            <div className="pt-2 border-t border-slate-100 max-h-[40%] overflow-y-auto">
+              <div className="flex flex-wrap justify-center gap-1.5">
+                {chatMenuId !== (chatMenuSettings.rootMenu || 'root') && <>
+                  <button type="button" onClick={() => setChatMenuId(chatMenuSettings.rootMenu || 'root')} className="rounded-full border px-2.5 py-1 text-[10px]">← {chatMenuSettings.backLabel}</button>
+                  <button type="button" onClick={() => { setChatMenuId(chatMenuSettings.rootMenu || 'root'); setChatMessages([]); }} className="rounded-full border px-2.5 py-1 text-[10px]">{chatMenuSettings.mainMenuLabel}</button>
+                </>}
+                {activeChatMenu.options.map((option: any) => <button key={option.id} type="button" disabled={isSendingChat} onClick={() => void handleMenuOption(option)} className="rounded-full border border-brand-100 bg-brand-50 px-2.5 py-1 text-[10px] font-medium text-brand-700 hover:bg-brand-100">{option.label}</button>)}
               </div>
             </div>
           </div>
@@ -699,6 +663,7 @@ export const DashboardPage: React.FC = () => {
                 disabled={
                   isReevaluating ||
                   isSubmitting ||
+                  !hasPendingChanges ||
                   phase !== 'done' ||
                   !latestSession?._id ||
                   latestSession.canReevaluate === false
@@ -733,15 +698,24 @@ export const DashboardPage: React.FC = () => {
             />
 
             <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
-              <span>More Accurate<br />(Deterministic)</span>
-              <span className="text-right">More Creative<br />(Diverse)</span>
+              <span>Plain</span>
+              <span className="text-right">Playful</span>
             </div>
+            <p className="text-[10px] text-slate-500">Controls the creativity and humor of your Creative Rewrite. It does not change vocabulary.</p>
 
             {reevalError && (
               <div className="p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[10px] leading-relaxed">
                 {reevalError}
               </div>
             )}
+          </div>
+
+          <div className="w-[290px] max-w-full self-start bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs space-y-2">
+            <h3 className="text-xs font-bold text-slate-800">Level</h3>
+            <div className="flex flex-wrap gap-1">
+              {levelOptions.map((level) => <button key={level} type="button" onClick={() => { setSelectedLevel(level); try { localStorage.setItem(`fluentlens.level.${selectedLanguage}`, level); } catch { /* optional preference */ } }} className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${selectedLevel === level ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{level}</button>)}
+            </div>
+            <p className="text-[10px] text-slate-500">Vocabulary and grammar suggestions match this level.</p>
           </div>
 
         </div>
@@ -1031,7 +1005,7 @@ export const DashboardPage: React.FC = () => {
                   <h2 className="text-sm font-bold text-slate-900">Improvements</h2>
                   <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">
                     {isReevaluating
-                      ? 'Evaluating… regenerating suggestions at the selected temperature.'
+                      ? 'Updating your script suggestions and Creative Rewrite.'
                       : phase === 'done' && submittedTemperature !== null
                       ? getTemperatureModeText(submittedTemperature)
                       : phase === 'analyzing'
@@ -1045,6 +1019,14 @@ export const DashboardPage: React.FC = () => {
             {/* Scrollable Body (Internal scroll only) */}
             <div className="flex-1 min-h-0 overflow-y-auto thin-scrollbar p-4 space-y-3 pb-6">
               
+              {latestSession?.report && phase === 'done' && <section className="rounded-xl border border-slate-200 p-3 space-y-2.5">
+                <div className="flex items-center justify-between"><h3 className="text-xs font-bold text-slate-900">Script</h3><button type="button" onClick={handleReevaluate} disabled={isReevaluating || isSubmitting || !hasPendingChanges} className="rounded-lg bg-brand-600 px-2.5 py-1 text-[10px] font-semibold text-white disabled:opacity-50">{isReevaluating ? 'Evaluating…' : 'Re-evaluate'}</button></div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <div className="space-y-1"><div className="flex justify-between text-[10px] font-semibold"><span>Your script</span>{scriptText !== latestSession.report.transcript && <span className="text-amber-700">Edited</span>}</div><textarea value={scriptText || latestSession.report.transcript || ''} onChange={(e) => setScriptText(e.target.value)} spellCheck={false} lang={selectedLanguage === 'Japanese' ? 'ja' : 'en'} maxLength={8000} className="w-full min-h-32 max-h-56 overflow-y-auto resize-y rounded-lg border border-slate-200 p-2 text-xs" /><div className="flex justify-between text-[10px] text-slate-500"><span>AI can mishear words. Fix anything wrong, then press Re-evaluate.</span><span>{scriptText.length}/8000</span></div><button type="button" onClick={() => setScriptText(latestSession.originalTranscript || latestSession.report.originalTranscript || latestSession.report.transcript)} className="text-[10px] text-brand-700">Reset to AI transcript</button></div>
+                  <div className="space-y-1"><div className="flex justify-between text-[10px] font-semibold"><span>Improved script</span><button type="button" onClick={() => void navigator.clipboard.writeText(latestSession.report.improved_transcript || '')} className="text-brand-700">Copy</button></div><div className="min-h-32 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs whitespace-pre-wrap">{latestSession.report.improved_transcript || 'Nothing to show for this yet.'}</div></div>
+                </div>
+              </section>}
+              {latestSession?.report?.improvements?.creative_rewrite?.items?.length > 0 && phase === 'done' && <section className="rounded-xl border border-slate-200 p-3 space-y-2"><h3 className="text-xs font-bold text-slate-900">Creative Rewrite</h3><p className="text-[10px] text-slate-500">{temperature < 0.35 ? 'Plain' : temperature <= 0.7 ? 'Lively' : 'Playful'} ({temperature.toFixed(2)})</p>{latestSession.report.improvements.creative_rewrite.items.slice(0, 3).map((item: any, index: number) => <div key={index} className="rounded-lg bg-slate-50 p-2 text-xs"><p><span className="text-slate-500">{item.original}</span> → <strong>{item.rewrite}</strong></p><p className="mt-1 text-[10px] text-slate-500">{item.style_note}</p></div>)}</section>}
               {/* SKELETON STATE: analyzing */}
               {phase === 'analyzing' && (
                 <div className="space-y-3">
@@ -1173,7 +1155,7 @@ export const DashboardPage: React.FC = () => {
                               {vocabularyReportItems.map((item: any, idx: number) => (
                                 <div key={idx} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
                                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                                    <span className="text-xs font-bold text-brand-900">{item.word}</span>
+                                    <span className="text-xs font-bold text-brand-900">{item.word}{item.reading ? ` (${item.reading})` : ''}</span>
                                     {item.replaces && (
                                       <span className="text-[10px] text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded-full">
                                         replaces: <span className="font-semibold text-slate-700">{item.replaces}</span>
@@ -1321,57 +1303,7 @@ export const DashboardPage: React.FC = () => {
         {/* ================================================== */}
         <div className="space-y-3.5 min-w-0 min-h-0 lg:h-full lg:overflow-y-auto lg:overflow-x-hidden thin-scrollbar">
           
-          {/* Calendar Card */}
-          <div className="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs space-y-3">
-            <div className="flex min-w-0 items-center justify-between gap-1.5">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <CalendarIcon className="w-3.5 h-3.5 text-brand-600" />
-                <h3 className="text-xs font-bold text-slate-900">Calendar</h3>
-              </div>
-              <span className="min-w-0 shrink text-right text-[10px] font-semibold leading-tight text-slate-500">{activeDaysCount} active days</span>
-            </div>
-
-            {/* Month Header */}
-            <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-              <button className="p-0.5 rounded text-slate-400 hover:text-slate-600">
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <span>October 2026</span>
-              <button className="p-0.5 rounded text-slate-400 hover:text-slate-600">
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Days Grid */}
-            <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-0.5 text-center text-[10px]">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                <div key={d} className="text-slate-400 font-semibold py-0.5">{d}</div>
-              ))}
-              
-              <div /><div /><div /><div />
-
-              {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
-                const isActiveDay = [3, 6, 9, 14, 20].includes(day);
-                const isInactiveDay = [10, 16, 28].includes(day);
-
-                return (
-                  <div key={day} className="min-w-0 py-0.5 flex items-center justify-center">
-                    {isActiveDay ? (
-                      <span className="size-6 mx-auto rounded-full bg-emerald-400 text-white font-bold text-[10px] flex items-center justify-center shadow-2xs">
-                        {day}
-                      </span>
-                    ) : isInactiveDay ? (
-                      <span className="size-6 mx-auto rounded-full bg-amber-400 text-white font-bold text-[10px] flex items-center justify-center shadow-2xs">
-                        {day}
-                      </span>
-                    ) : (
-                      <span className="text-slate-700 font-medium">{day}</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <PracticeCalendar practiceDates={progressData?.practiceDates || []} timezone={user?.timezone} />
 
           {/* My Diary Card */}
           <div

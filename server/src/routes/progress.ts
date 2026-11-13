@@ -4,6 +4,7 @@ import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { User } from '../models/User';
 import { Session } from '../models/Session';
 import { VocabWord } from '../models/VocabWord';
+import { getPracticeDates } from '../services/practiceDates';
 
 const router = Router();
 
@@ -34,6 +35,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
           body_language: null,
         },
       }));
+      const practiceDates = getPracticeDates(completedSessions, user?.timezone || 'UTC');
 
       return res.status(200).json({
         currentStreak: user?.currentStreak ?? 0,
@@ -43,6 +45,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
         learnedCount,
         totalSessions: completedSessions.length,
         history,
+        practiceDates,
       });
     }
 

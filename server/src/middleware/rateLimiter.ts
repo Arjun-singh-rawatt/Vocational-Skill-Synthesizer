@@ -8,10 +8,11 @@ export const sessionRateLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-export const chatRateLimiter = rateLimit({
+export const reevaluateRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 60,
-  message: { error: 'Chat rate limit reached. Please try again in 15 minutes.' },
+  max: 20,
+  keyGenerator: (req: any) => req.userId || req.ip,
+  message: { error: 'Too many re-evaluations. Please try again in 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
 });

@@ -11,6 +11,8 @@ export interface IChatMessage {
 export interface ISession extends Document {
   userId: mongoose.Types.ObjectId;
   language: string;
+  level: string;
+  originalTranscript?: string;
   goal: 'conversation' | 'interview' | 'ielts' | 'presentation';
   mediaType: 'video' | 'audio';
   durationSec: number;
@@ -40,6 +42,8 @@ const SessionSchema = new Schema<ISession>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     language: { type: String, required: true },
+    level: { type: String, required: true, default: 'B1' },
+    originalTranscript: { type: String },
     goal: { type: String, enum: ['conversation', 'interview', 'ielts', 'presentation'], required: true },
     mediaType: { type: String, enum: ['video', 'audio'], required: true },
     durationSec: { type: Number, required: true, default: 0 },

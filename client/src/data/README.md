@@ -1,15 +1,17 @@
-# Editing chatbot replies
+# Editing the chatbot menu
 
-The chatbot content lives in `client/src/data/chatIntents.json`.
-1. Add an object to the `intents` array with a unique kebab-case `id` and `enabled: true`.
-2. Add `match.exact` for whole-message matches, `match.phrases` for contained text, or `match.keywords` for help-cued terms.
-3. Add a concise `reply`; use `replyNoSession` for a different answer before analysis and `action` to open a diary.
-4. Example: `{ "id":"upload-help", "enabled":true, "match":{"phrases":["how do i upload","upload kaise karun"],"keywords":["upload*"],"needsHelpCue":true}, "reply":"Choose Upload Audio or Video, select your clip, then analyze." }`.
-5. Exact matches compare the whole normalized message; phrases match when contained in the normalized message.
-6. Keywords match a word; a trailing `*` matches a prefix. By default, a help cue is required unless the message is just that keyword.
-7. Intent array order is priority because the first matching intent wins.
-8. Disable an entry by setting `enabled` to `false`; it stays in the file but is ignored.
-9. Put specific intents above general ones to avoid broad matches taking priority.
-10. Replies support `{{maxFileSizeMB}}`, `{{maxDurationSec}}`, and `{{allowedFormats}}`.
-11. The development server hot-reloads JSON edits; production requires a fresh build.
-12. Run `npm test --prefix client` after editing to check routing and data validity.
+1. The chatbot content is in `client/src/data/chatMenu.json`.
+2. Add an option to a menu's `options` array to create a question button.
+3. Every option needs a unique kebab-case `id`, `label`, and `type`.
+4. A `menu` option needs a `target` menu id.
+5. An `answer` option needs a `reply`; it can also have `replyNoSession`, `action`, and `next`.
+6. A `report` option needs a report `section` and can have `next`.
+7. Option types are `menu`, `answer`, and `report`.
+8. `when` can be `any`, `session`, or `noSession`; it defaults to `any`.
+9. Options appear in array order. Set `enabled` to `false` to hide one.
+10. Replies support the placeholders listed in the JSON `_help` field.
+11. Copy these options into the root menu's `options` array: `{ "id": "upload-help", "label": "How do I upload?", "type": "answer", "reply": "Choose a clip, then select Analyze." }` and `{ "id": "more-help", "label": "More help", "type": "menu", "target": "moreHelp" }`.
+12. Add this sub-menu object under `menus`: `"moreHelp": { "prompt": "More help", "options": [{ "id": "back-tip", "label": "Where do I start?", "type": "answer", "reply": "Upload or record a clip." }] }`.
+14. Run `npm run check:chat-menu --prefix client` to validate ids, replies, routes, and placeholders.
+15. In development, invalid options are skipped and warnings are logged.
+16. The dev server hot-reloads JSON edits; production needs a rebuild.

@@ -9,22 +9,16 @@ export interface FluencyMetrics {
 }
 
 const NO_SPACE_LANGUAGES = ['chinese', 'mandarin', 'japanese', 'thai', 'zh', 'ja', 'th'];
+// Japanese pace uses non-whitespace, non-punctuation characters/minute: 180–360 optimal,
+// ramps to zero at 60 and 600. Fillers are measured per 100 characters (2 is optimal).
+const JAPANESE_PACE_BANDS = { slow: 60, optimalLow: 180, optimalHigh: 360, fast: 600 };
 
 export function calculateWordCount(transcript: string, language: string): number {
   const cleanText = transcript.trim();
   if (!cleanText) return 0;
-
   const langLower = language.toLowerCase();
-  const isNoSpaceLang = NO_SPACE_LANGUAGES.some((l) => langLower.includes(l));
-
-  if (isNoSpaceLang) {
-    // For non-space languages, use characters / 2 as approximation
-    return Math.ceil(cleanText.replace(/\s+/g, '').length / 2);
-  }
-
-  // Standard whitespace split for space-separated languages
-  const words = cleanText.split(/\s+/).filter((w) => w.length > 0);
-  return words.length;
+  if (NO_SPACE_LANGUAGES.some((l) => langLower.includes(l))) return Math.ceil(cleanText.replace(/\s+/g, '').length / 2);
+  return cleanText.split(/\s+/).filter(Boolean).length;
 }
 
 export function calculateFluencyIndex(options: {
@@ -34,64 +28,32 @@ export function calculateFluencyIndex(options: {
   geminiFillers: string[];
   language: string;
 }): FluencyMetrics {
-  const durationSec = Math.max(options.durationSec, 1); // avoid div by 0
+  const durationSec = Math.max(options.durationSec, 1);
+  const japanese = ['japanese', 'ja'].includes(options.language.toLowerCase());
+  const japaneseCharacters = Array.from(options.transcript).filter((character) => !/\s|[\p{P}\p{S}]/u.test(character)).length;
   const wordCount = calculateWordCount(options.transcript, options.language);
   const durationMin = durationSec / 60;
-
-  // 1. WPM & Pace Score
-  const wpm = Math.round(wordCount / durationMin);
-  let paceScore = 100;
-  if (wpm >= 110 && wpm <= 160) {
-    paceScore = 100;
-  } else if (wpm < 110) {
-    paceScore = Math.max(0, Math.round((100 * (wpm - 40)) / (110 - 40)));
-  } else {
-    paceScore = Math.max(0, Math.round((100 * (240 - wpm)) / (240 - 160)));
-  }
-
-  // 2. Pause Ratio & Pause Score
+  const wpm = Math.round((japanese ? japaneseCharacters : wordCount) / durationMin);
+  const bands = japanese ? JAPANESE_PACE_BANDS : { slow: 40, optimalLow: 110, optimalHigh: 160, fast: 240 };
+  let paceScore = wpm >= bands.optimalLow && wpm <= bands.optimalHigh ? 100
+    : wpm < bands.optimalLow ? Math.max(0, Math.round((100 * (wpm - bands.slow)) / (bands.optimalLow - bands.slow)))
+    : Math.max(0, Math.round((100 * (bands.fast - wpm)) / (bands.fast - bands.optimalHigh)));
   const pauseRatio = Number((options.totalSilenceSec / durationSec).toFixed(3));
-  let pauseScore = 100;
-  if (pauseRatio <= 0.15) {
-    pauseScore = 100;
-  } else {
-    pauseScore = Math.max(0, Math.round((100 * (0.45 - pauseRatio)) / (0.45 - 0.15)));
-  }
-
-  // 3. Fillers per 100 words & Filler Score
+  const pauseScore = pauseRatio <= 0.15 ? 100 : Math.max(0, Math.round((100 * (0.45 - pauseRatio)) / 0.3));
   const defaultEnglishFillers = ['um', 'uh', 'er', 'like', 'you know', 'i mean', 'basically', 'actually'];
-  const allFillers = Array.from(new Set([...options.geminiFillers, ...defaultEnglishFillers]));
-
+  const japaneseFillers = ['えっと', 'えーと', 'あの', 'あのー', 'まあ', 'その', 'えー', 'なんか'];
+  const allFillers = Array.from(new Set([...options.geminiFillers, ...(japanese ? japaneseFillers : defaultEnglishFillers)]));
   let fillerCount = 0;
   const lowerTranscript = options.transcript.toLowerCase();
   for (const filler of allFillers) {
     if (!filler) continue;
-    const regex = new RegExp(`\\b${filler.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-    const matches = lowerTranscript.match(regex);
-    if (matches) {
-      fillerCount += matches.length;
-    }
+    const escaped = filler.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = japanese ? new RegExp(escaped, 'gi') : new RegExp(`\\b${escaped}\\b`, 'gi');
+    fillerCount += lowerTranscript.match(regex)?.length || 0;
   }
-
-  const safeWordCount = Math.max(wordCount, 1);
-  const fillersPer100 = Number(((fillerCount / safeWordCount) * 100).toFixed(1));
-  let fillerScore = 100;
-  if (fillersPer100 <= 2) {
-    fillerScore = 100;
-  } else {
-    fillerScore = Math.max(0, Math.round((100 * (12 - fillersPer100)) / (12 - 2)));
-  }
-
-  // 4. Deterministic Index = round(0.4*paceScore + 0.3*pauseScore + 0.3*fillerScore)
+  const baseCount = japanese ? Math.max(japaneseCharacters / 100, 1) : Math.max(wordCount, 1);
+  const fillersPer100 = Number(((fillerCount / baseCount) * 100).toFixed(1));
+  const fillerScore = fillersPer100 <= 2 ? 100 : Math.max(0, Math.round((100 * (12 - fillersPer100)) / 10));
   const index = Math.round(0.4 * paceScore + 0.3 * pauseScore + 0.3 * fillerScore);
-
-  return {
-    wpm,
-    pauseRatio,
-    fillersPer100,
-    paceScore,
-    pauseScore,
-    fillerScore,
-    index,
-  };
+  return { wpm, pauseRatio, fillersPer100, paceScore, pauseScore, fillerScore, index };
 }

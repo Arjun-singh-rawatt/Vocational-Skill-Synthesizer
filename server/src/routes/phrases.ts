@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import mongoose from 'mongoose';
 import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { SavedPhrase } from '../models/SavedPhrase';
@@ -36,6 +37,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 });
 
 router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid phrase id.' });
   try {
     const result = await SavedPhrase.findOneAndDelete({ _id: req.params.id, userId: req.userId });
     if (!result) return res.status(404).json({ error: 'Saved phrase not found' });

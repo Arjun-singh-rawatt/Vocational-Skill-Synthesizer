@@ -20,5 +20,7 @@ describe('Demo Mode Sample Report Verification', () => {
     expect(Array.isArray(sampleReportData.improvements.vocabulary_upgrades)).toBe(true);
     expect(Array.isArray(sampleReportData.improvements.phrase_upgrades)).toBe(true);
     expect(Array.isArray(sampleReportData.improvements.sentence_structure)).toBe(true);
+    expect(sampleReportData.improvements.creative_rewrite?.items.length).toBeGreaterThan(0);
+    expect(sampleReportData.improvements.vocabulary_upgrades.every((item: any) => typeof item.reading === 'string')).toBe(true);
   });
 });
