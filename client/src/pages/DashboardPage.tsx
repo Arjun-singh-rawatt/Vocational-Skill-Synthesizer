@@ -3,6 +3,7 @@ import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { MyDiaryDrawer } from '../components/MyDiaryDrawer';
 import { PhrasesDrawer } from '../components/PhrasesDrawer';
+import { PracticeCalendar } from '../components/PracticeCalendar';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getMenu, resolveReply, formatReportSection, chatMenuSettings } from '../lib/chatMenu';
@@ -13,8 +14,6 @@ import {
   Mic,
   Upload,
   BarChart2,
-  Calendar as CalendarIcon,
-  ChevronLeft,
   ChevronRight,
   Send,
   Thermometer,
@@ -533,7 +532,6 @@ export const DashboardPage: React.FC = () => {
   }, [latestSession?._id]);
 
   // Calendar calculations
-  const activeDaysCount = progressData?.currentStreak ?? 0;
   const isCompact = phase === 'analyzing' || phase === 'done';
   const vocabularyReportItems = [
     ...(improvements?.vocabulary_upgrades || []),
@@ -578,9 +576,9 @@ export const DashboardPage: React.FC = () => {
                 <div className="w-7 h-7 rounded-lg bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600">
                   <Sparkles className="w-3.5 h-3.5" />
                 </div>
-                <h2 className="text-sm font-bold text-slate-900">AI Chatbot</h2>
+                <h2 className="text-sm font-bold text-slate-900">{chatMenuSettings.chatTitle}</h2>
                 </div>
-              <button type="button" onClick={() => { setChatMessages([]); setChatMenuId(chatMenuSettings.rootMenu || 'root'); }} aria-label="Clear chat" title="Clear chat" className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+              <button type="button" onClick={() => { setChatMessages([]); setChatMenuId(chatMenuSettings.rootMenu || 'root'); }} aria-label={chatMenuSettings.clearLabel} title={chatMenuSettings.clearLabel} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -644,8 +642,8 @@ export const DashboardPage: React.FC = () => {
             <div className="pt-2 border-t border-slate-100 max-h-[40%] overflow-y-auto">
               <div className="flex flex-wrap justify-center gap-1.5">
                 {chatMenuId !== (chatMenuSettings.rootMenu || 'root') && <>
-                  <button type="button" onClick={() => setChatMenuId('root')} className="rounded-full border px-2.5 py-1 text-[10px]">← Back</button>
-                  <button type="button" onClick={() => { setChatMenuId('root'); setChatMessages([]); }} className="rounded-full border px-2.5 py-1 text-[10px]">Main menu</button>
+                  <button type="button" onClick={() => setChatMenuId(chatMenuSettings.rootMenu || 'root')} className="rounded-full border px-2.5 py-1 text-[10px]">← {chatMenuSettings.backLabel}</button>
+                  <button type="button" onClick={() => { setChatMenuId(chatMenuSettings.rootMenu || 'root'); setChatMessages([]); }} className="rounded-full border px-2.5 py-1 text-[10px]">{chatMenuSettings.mainMenuLabel}</button>
                 </>}
                 {activeChatMenu.options.map((option: any) => <button key={option.id} type="button" disabled={isSendingChat} onClick={() => void handleMenuOption(option)} className="rounded-full border border-brand-100 bg-brand-50 px-2.5 py-1 text-[10px] font-medium text-brand-700 hover:bg-brand-100">{option.label}</button>)}
               </div>
@@ -1305,57 +1303,7 @@ export const DashboardPage: React.FC = () => {
         {/* ================================================== */}
         <div className="space-y-3.5 min-w-0 min-h-0 lg:h-full lg:overflow-y-auto lg:overflow-x-hidden thin-scrollbar">
           
-          {/* Calendar Card */}
-          <div className="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs space-y-3">
-            <div className="flex min-w-0 items-center justify-between gap-1.5">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <CalendarIcon className="w-3.5 h-3.5 text-brand-600" />
-                <h3 className="text-xs font-bold text-slate-900">Calendar</h3>
-              </div>
-              <span className="min-w-0 shrink text-right text-[10px] font-semibold leading-tight text-slate-500">{activeDaysCount} active days</span>
-            </div>
-
-            {/* Month Header */}
-            <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-              <button className="p-0.5 rounded text-slate-400 hover:text-slate-600">
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <span>October 2026</span>
-              <button className="p-0.5 rounded text-slate-400 hover:text-slate-600">
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Days Grid */}
-            <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-0.5 text-center text-[10px]">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                <div key={d} className="text-slate-400 font-semibold py-0.5">{d}</div>
-              ))}
-              
-              <div /><div /><div /><div />
-
-              {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
-                const isActiveDay = [3, 6, 9, 14, 20].includes(day);
-                const isInactiveDay = [10, 16, 28].includes(day);
-
-                return (
-                  <div key={day} className="min-w-0 py-0.5 flex items-center justify-center">
-                    {isActiveDay ? (
-                      <span className="size-6 mx-auto rounded-full bg-emerald-400 text-white font-bold text-[10px] flex items-center justify-center shadow-2xs">
-                        {day}
-                      </span>
-                    ) : isInactiveDay ? (
-                      <span className="size-6 mx-auto rounded-full bg-amber-400 text-white font-bold text-[10px] flex items-center justify-center shadow-2xs">
-                        {day}
-                      </span>
-                    ) : (
-                      <span className="text-slate-700 font-medium">{day}</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <PracticeCalendar practiceDates={progressData?.practiceDates || []} timezone={user?.timezone} />
 
           {/* My Diary Card */}
           <div

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createMenu, formatReportSection, getMenu, resolveReply } from './chatMenu';
+import { createMenu, formatReportSection, getMenu, resolveReply, validateMenu } from './chatMenu';
 import menuJson from '../data/chatMenu.json';
 
 describe('chat menu', () => {
@@ -7,6 +7,8 @@ describe('chat menu', () => {
     expect(getMenu('root', { hasSession: false }).options.every((option: any) => option.when !== 'session')).toBe(true);
     expect(getMenu('root', { hasSession: true }).options.some((option: any) => option.section === 'vocabulary')).toBe(true);
     expect(createMenu(menuJson).menus.root.options.length).toBeGreaterThan(0);
+    expect(validateMenu(menuJson).errors).toEqual([]);
+    expect(validateMenu(menuJson).skippedOptionCount).toBe(0);
     const menus = createMenu(menuJson).menus;
     const all = Object.values<any>(menus).flatMap((menu: any) => menu.options);
     expect(new Set(all.map((option: any) => option.id)).size).toBe(all.length);
@@ -18,7 +20,9 @@ describe('chat menu', () => {
     expect(resolveReply({ id: 'a', label: 'a', type: 'answer', reply: '{{level}} {{language}} {{temperature}}' }, { hasSession: true, level: 'N5', language: 'Japanese', temperature: 0.7 })).toBe('N5 Japanese 0.7');
   });
   it('skips malformed data and formats report sections with an empty fallback', () => {
-    expect(createMenu({ settings: { rootMenu: 'r' }, menus: { r: { options: [{ id: 'bad', label: 'oops', type: 'nope' }] } } }).menus.r.options[0].label).toBe('Menu unavailable.');
+    const malformed = createMenu({ settings: { rootMenu: 'r' }, menus: { r: { options: [{ id: 'bad', label: 'oops', type: 'answer' }] } } });
+    expect(malformed.menus.r.options[0].label).toBe('Menu unavailable.');
+    expect(malformed.errors.some((error) => error.menuId === 'r' && error.optionId === 'bad' && error.message.includes('missing reply'))).toBe(true);
     for (const section of ['vocabulary','idioms','wordChoices','sentences','tone','creative']) expect(formatReportSection(section, {})).toBe('Nothing to show for this yet.');
   });
   it('formats populated report sections', () => {

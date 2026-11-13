@@ -12,6 +12,17 @@ export function removeAuthToken() {
   localStorage.removeItem('fluentlens_token');
 }
 
+export interface ProgressData {
+  currentStreak: number;
+  longestStreak: number;
+  lastPracticeDate: string | null;
+  savedCount: number;
+  learnedCount: number;
+  totalSessions: number;
+  history: Array<{ id: string; createdAt: string; language: string; goal: string; fluencyIndex: number; wpm: number; scores: Record<string, number | null> }>;
+  practiceDates: string[];
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = getAuthToken();
   const headers: Record<string, string> = {
@@ -89,6 +100,6 @@ export const api = {
     delete: (id: string) => request<{ message: string }>(`/api/phrases/${id}`, { method: 'DELETE' }),
   },
   progress: {
-    get: () => request<any>('/api/progress'),
+    get: () => request<ProgressData>('/api/progress'),
   },
 };
