@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_API_URL?.replace(/\/+$/, '') || '';
 
 function getAuthToken(): string | null {
   return localStorage.getItem('fluentlens_token');
@@ -24,6 +24,9 @@ export interface ProgressData {
 }
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  if (!API_BASE_URL && !import.meta.env.DEV) {
+    throw new Error('The API URL is not configured. Set VITE_API_URL and rebuild the frontend.');
+  }
   const token = getAuthToken();
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),

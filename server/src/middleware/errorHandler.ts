@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { env } from '../config/env';
 
 export function errorHandler(
   err: any,
@@ -8,11 +9,15 @@ export function errorHandler(
 ) {
   console.error('[Global Error Handler]', err);
 
-  const statusCode = err.status || err.statusCode || 500;
-  const message = err.message || 'Internal Server Error';
+  const rawStatusCode = err.status || err.statusCode || 500;
+  const statusCode = err.code === 'LIMIT_FILE_SIZE' ? 413 : Number.isInteger(rawStatusCode) && rawStatusCode >= 400 && rawStatusCode <= 599 ? rawStatusCode : 500;
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const message = err.code === 'LIMIT_FILE_SIZE'
+    ? `Uploaded file exceeds the ${env.MAX_UPLOAD_MB} MB limit.`
+    : !isDevelopment && statusCode >= 500 ? 'Internal Server Error' : err.message || 'Internal Server Error';
 
   res.status(statusCode).json({
     error: message,
-    ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {}),
+    ...(isDevelopment ? { stack: err.stack } : {}),
   });
 }

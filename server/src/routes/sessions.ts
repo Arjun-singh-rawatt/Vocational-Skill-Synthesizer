@@ -7,18 +7,15 @@ import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { reevaluateRateLimiter, sessionRateLimiter } from '../middleware/rateLimiter';
 import { Session } from '../models/Session';
+import sampleReportData from '../demo/sampleReport.json';
 import { User } from '../models/User';
 import { env } from '../config/env';
-import { getMediaDuration, detectAudioSilence } from '../services/media';
+import { inspectMedia, detectAudioSilence } from '../services/media';
 import { analyzeMediaWithGemini, createCreativeRewrite, reimproveFromTranscript } from '../services/gemini';
 import { calculateFluencyIndex } from '../services/fluency';
 import { calculateStreak } from '../services/streak';
 import { checkAndMarkSavedWordsLearned } from '../services/vocab';
 import {
-  getUploadsDir,
-  resolveSessionMediaPath,
-  originalMediaExists,
-  reevaluatePreflight,
   buildAnalysisFailureUpdate,
 } from '../services/sessionMedia';
 
@@ -43,23 +40,8 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: { fileSize: env.MAX_UPLOAD_MB * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = [
-      'video/webm',
-      'video/mp4',
-      'audio/webm',
-      'audio/mpeg',
-      'audio/wav',
-      'audio/mp4',
-      'audio/ogg',
-      'audio/mp3',
-    ];
-    if (allowedTypes.includes(file.mimetype) || file.mimetype.startsWith('video/') || file.mimetype.startsWith('audio/')) {
-      cb(null, true);
-    } else {
-      cb(new Error(`Invalid file type: ${file.mimetype}. Allowed audio/video formats only.`));
-    }
-  },
+  // MIME headers are user-controlled; inspect the actual streams with FFprobe after upload.
+  fileFilter: (req, file, cb) => cb(null, true),
 });
 
 const createSessionSchema = z.object({
@@ -82,7 +64,10 @@ router.post('/', authMiddleware, sessionRateLimiter, upload.single('file'), asyn
 
     const { language, goal, temperature } = parseResult.data;
     const level = parseResult.data.level || (language === 'Japanese' ? 'N5' : 'B1');
-    if (!(language === 'Japanese' ? ['N5','N4','N3','N2','N1'] : ['A1','A2','B1','B2','C1','C2']).includes(level)) return res.status(400).json({ error: `Level ${level} is not valid for ${language}.` });
+    if (!(language === 'Japanese' ? ['N5','N4','N3','N2','N1'] : ['A1','A2','B1','B2','C1','C2']).includes(level)) {
+      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      return res.status(400).json({ error: `Level ${level} is not valid for ${language}.` });
+    }
     let tempNum = 0.7;
     if (temperature !== undefined) {
       const parsed = parseFloat(temperature);
@@ -94,18 +79,21 @@ router.post('/', authMiddleware, sessionRateLimiter, upload.single('file'), asyn
       return res.status(400).json({ error: 'Media file (audio/video) is required' });
     }
 
-    let mimeType = req.file.mimetype;
-    let mediaType: 'video' | 'audio' = mimeType.startsWith('video/') ? 'video' : 'audio';
+    let mimeType: string;
+    let mediaType: 'video' | 'audio';
     if (!filePath || !fs.existsSync(filePath)) {
       return res.status(400).json({ error: 'The uploaded media file could not be read. Please choose it again.' });
     }
     let durationSec: number;
     try {
-      durationSec = await getMediaDuration(filePath);
+      const media = await inspectMedia(filePath);
+      durationSec = media.durationSec;
+      mediaType = media.mediaType;
+      mimeType = media.mimeType;
     } catch (err: any) {
       fs.unlinkSync(filePath);
       filePath = undefined;
-      return res.status(400).json({ error: err.message || 'Unable to validate media duration.' });
+      return res.status(400).json({ error: err.message || 'Unable to validate uploaded media.' });
     }
     if (durationSec > env.MAX_CLIP_SECONDS) {
       fs.unlinkSync(filePath);
@@ -121,7 +109,6 @@ router.post('/', authMiddleware, sessionRateLimiter, upload.single('file'), asyn
       durationSec,
       status: 'processing',
       mimeType,
-      mediaFilename: path.basename(filePath!),
       temperature: tempNum,
       isReevaluating: false,
       chat: [],
@@ -152,7 +139,7 @@ router.post('/', authMiddleware, sessionRateLimiter, upload.single('file'), asyn
     });
   } catch (err: any) {
     if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    res.status(500).json({ error: err.message || 'Failed to create session' });
+    res.status(500).json({ error: env.NODE_ENV === 'development' ? (err.message || 'Failed to create session') : 'Failed to create session.' });
   }
 });
 
@@ -162,7 +149,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const sessions = await Session.find({ userId: req.userId }).sort({ createdAt: -1 });
     res.status(200).json(sessions);
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to fetch sessions' });
+    res.status(500).json({ error: env.NODE_ENV === 'development' ? (err.message || 'Failed to fetch sessions') : 'Failed to fetch sessions.' });
   }
 });
 
@@ -176,7 +163,7 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     }
     res.status(200).json(session);
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to fetch session' });
+    res.status(500).json({ error: env.NODE_ENV === 'development' ? (err.message || 'Failed to fetch session') : 'Failed to fetch session.' });
   }
 });
 
@@ -207,8 +194,8 @@ router.post('/:id/reevaluate', authMiddleware, reevaluateRateLimiter, async (req
       const report = { ...oldReport, transcript, improved_transcript: improved.improved_transcript, improvements: { ...oldReport.improvements, ...improved.improvements, tone, creative_rewrite: creative } };
       const fluency = calculateFluencyIndex({ transcript, durationSec: session.durationSec, totalSilenceSec: session.durationSec * (session.fluency?.pauseRatio || 0), geminiFillers: report.filler_words_detected || [], language: session.language });
       await Session.findByIdAndUpdate(session._id, { $set: { report, fluency, level, temperature, status: 'done', isReevaluating: false }, $unset: { errorMessage: 1 } });
-    } catch (error: any) { await Session.findByIdAndUpdate(session._id, { $set: { status: 'done', isReevaluating: false, errorMessage: error.message || 'Re-evaluation failed' } }); } })();
-  } catch (error: any) { res.status(500).json({ error: error.message || 'Failed to re-evaluate session' }); }
+    } catch (error: any) { await Session.findByIdAndUpdate(session._id, { $set: { status: 'done', isReevaluating: false, errorMessage: env.NODE_ENV === 'development' ? (error.message || 'Re-evaluation failed') : 'Re-evaluation failed.' } }); } })();
+  } catch (error: any) { res.status(500).json({ error: env.NODE_ENV === 'development' ? (error.message || 'Failed to re-evaluate session') : 'Failed to re-evaluate session.' }); }
 });
 
 /**
@@ -247,6 +234,10 @@ async function processSessionAsync(opts: {
     let interactionId: string | undefined = undefined;
     let totalSilenceSec = 3.5;
 
+    if (env.DEMO_MODE) {
+      // Keep the existing upload/session/polling lifecycle while bypassing FFmpeg and Gemini.
+      report = JSON.parse(JSON.stringify(sampleReportData));
+    } else {
     if (!filePath || !fs.existsSync(filePath)) {
         throw new Error('Original recording is no longer available on the server. Please upload the clip again.');
       }
@@ -271,6 +262,7 @@ async function processSessionAsync(opts: {
     report = geminiRes.report;
     try { report.improvements.creative_rewrite = await createCreativeRewrite({ transcript: report.transcript, language, level, tone: report.improvements.tone.label, temperature }); } catch (error) { console.error('[Creative Rewrite] Failed:', error); report.improvements.creative_rewrite = null; }
     interactionId = geminiRes.interactionId;
+    }
 
     // 3. Calculate Fluency Index
     const fluency = calculateFluencyIndex({
@@ -323,7 +315,12 @@ async function processSessionAsync(opts: {
     console.log(`[Background Job] Session ${sessionId} successfully processed and marked DONE!`);
   } catch (err: any) {
     console.error(`[Background Job Error] Session ${sessionId} failed:`, err);
-    await Session.findByIdAndUpdate(sessionId, buildAnalysisFailureUpdate(isReevaluate, err.message));
+    const message = env.NODE_ENV === 'development' ? err.message : 'Media analysis failed. Please try again.';
+    await Session.findByIdAndUpdate(sessionId, buildAnalysisFailureUpdate(isReevaluate, message));
+  } finally {
+    if (filePath && fs.existsSync(filePath)) {
+      try { fs.unlinkSync(filePath); } catch { console.warn('[Uploads] Could not remove a processed temporary file.'); }
+    }
   }
 }
 

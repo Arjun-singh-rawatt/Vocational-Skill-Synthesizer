@@ -1,9 +1,6 @@
 import ffmpegPath from 'ffmpeg-static';
 import ffprobeStatic from 'ffprobe-static';
-import { exec } from 'child_process';
-import util from 'util';
-
-const execPromise = util.promisify(exec);
+import { spawn } from 'child_process';
 
 export interface MediaProbeResult {
   durationSec: number;
@@ -14,23 +11,64 @@ export interface SilenceDetectResult {
   pauseCount: number;
 }
 
-export async function getMediaDuration(filePath: string): Promise<number> {
+export interface InspectedMedia {
+  durationSec: number;
+  mediaType: 'audio' | 'video';
+  mimeType: string;
+}
+
+function runProcess(executable: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, args, { windowsHide: true, shell: false });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8').on('data', (chunk: string) => { stdout += chunk; });
+    child.stderr.setEncoding('utf8').on('data', (chunk: string) => { stderr += chunk; });
+    child.once('error', () => reject(new Error('Media tools are unavailable.')));
+    child.once('close', (code) => code === 0 ? resolve({ stdout, stderr }) : reject(new Error('Media file could not be processed.')));
+  });
+}
+
+export async function inspectMedia(filePath: string): Promise<InspectedMedia> {
   const ffprobePath = ffprobeStatic.path;
-  if (!ffprobePath) {
-    throw new Error('Media duration could not be checked because ffprobe is unavailable. Please try again later.');
+  if (!ffprobePath) throw new Error('Media validation is unavailable. Please try again later.');
+
+  let probe: { format?: { duration?: string; format_name?: string }; streams?: Array<{ codec_type?: string }> };
+  try {
+    const { stdout } = await runProcess(ffprobePath, [
+      '-v', 'error', '-show_entries', 'format=duration,format_name:stream=codec_type', '-of', 'json', filePath,
+    ]);
+    probe = JSON.parse(stdout);
+  } catch {
+    throw new Error('This file is not a valid supported audio or video recording.');
   }
 
-  try {
-    const cmd = `"${ffprobePath}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`;
-    const { stdout } = await execPromise(cmd);
-    const duration = parseFloat(stdout.trim());
-    if (isNaN(duration) || duration <= 0) {
-      throw new Error('Unable to read media duration. Please choose a valid audio or video file.');
-    }
-    return Math.round(duration);
-  } catch (err: any) {
-    throw new Error(`Unable to read media duration. Please choose a valid audio or video file. (${err.message})`);
+  const formats = (probe.format?.format_name || '').split(',');
+  const streams = probe.streams || [];
+  const hasVideo = streams.some((stream) => stream.codec_type === 'video');
+  const hasAudio = streams.some((stream) => stream.codec_type === 'audio');
+  const durationSec = Number(probe.format?.duration);
+  if (!Number.isFinite(durationSec) || durationSec <= 0 || !hasAudio) {
+    throw new Error('This file must contain a valid audio track.');
   }
+
+  if (hasVideo) {
+    if (!formats.some((format) => ['mov', 'mp4', 'matroska', 'webm'].includes(format))) {
+      throw new Error('Supported video formats are MP4, MOV, and WebM.');
+    }
+    return { durationSec, mediaType: 'video', mimeType: formats.includes('webm') || formats.includes('matroska') ? 'video/webm' : 'video/mp4' };
+  }
+
+  if (formats.includes('mp3')) return { durationSec, mediaType: 'audio', mimeType: 'audio/mpeg' };
+  if (formats.includes('wav')) return { durationSec, mediaType: 'audio', mimeType: 'audio/wav' };
+  if (formats.includes('ogg')) return { durationSec, mediaType: 'audio', mimeType: 'audio/ogg' };
+  if (formats.includes('webm') || formats.includes('matroska')) return { durationSec, mediaType: 'audio', mimeType: 'audio/webm' };
+  if (formats.some((format) => ['mov', 'mp4', 'm4a', '3gp', '3g2'].includes(format))) return { durationSec, mediaType: 'audio', mimeType: 'audio/mp4' };
+  throw new Error('Supported audio formats are MP3, WAV, OGG, M4A, and WebM.');
+}
+
+export async function getMediaDuration(filePath: string): Promise<number> {
+  return (await inspectMedia(filePath)).durationSec;
 }
 
 export async function detectAudioSilence(filePath: string): Promise<SilenceDetectResult> {
@@ -40,9 +78,7 @@ export async function detectAudioSilence(filePath: string): Promise<SilenceDetec
   }
 
   try {
-    const cmd = `"${ffmpegPath}" -i "${filePath}" -af silencedetect=noise=-30dB:d=0.4 -f null -`;
-    // FFmpeg outputs silencedetect details to stderr
-    const { stderr } = await execPromise(cmd);
+    const { stderr } = await runProcess(ffmpegPath, ['-i', filePath, '-af', 'silencedetect=noise=-30dB:d=0.4', '-f', 'null', '-']);
 
     let totalSilenceSec = 0;
     let pauseCount = 0;
@@ -64,11 +100,11 @@ export async function detectAudioSilence(filePath: string): Promise<SilenceDetec
     };
   } catch (err: any) {
     // Note: ffmpeg outputs to stderr so execPromise might reject even on success, check stderr in error
-    if (err.stderr) {
+    if ((err as any).stderr) {
       let totalSilenceSec = 0;
       let pauseCount = 0;
 
-      const durationMatches = err.stderr.matchAll(/silence_duration:\s*([\d.]+)/g);
+      const durationMatches = (err as any).stderr.matchAll(/silence_duration:\s*([\d.]+)/g);
       for (const match of durationMatches) {
         if (match[1]) {
           const dur = parseFloat(match[1]);
@@ -81,7 +117,7 @@ export async function detectAudioSilence(filePath: string): Promise<SilenceDetec
       return { totalSilenceSec: Number(totalSilenceSec.toFixed(2)), pauseCount };
     }
 
-    console.warn(`[Media] Silence detection warning: ${err.message}`);
+    console.warn('[Media] Silence detection failed; continuing without silence metrics.');
     return { totalSilenceSec: 0, pauseCount: 0 };
   }
 }

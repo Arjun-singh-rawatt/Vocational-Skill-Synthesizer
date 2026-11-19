@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
-import { MAX_FILE_SIZE_MB } from '../data/uploadLimits';
+import { MAX_DURATION_SEC, MAX_FILE_SIZE_MB } from '../data/uploadLimits';
+import { readMediaDuration } from '../lib/mediaValidation';
 import {
   Video,
   Mic,
@@ -65,6 +66,7 @@ export const NewSessionPage: React.FC = () => {
   const [recordingSeconds, setRecordingSeconds] = useState(0);
 
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -144,9 +146,9 @@ export const NewSessionPage: React.FC = () => {
 
       timerRef.current = setInterval(() => {
         setRecordingSeconds((prev) => {
-          if (prev >= 179) {
+          if (prev >= MAX_DURATION_SEC - 1) {
             stopRecording();
-            return 180;
+            return MAX_DURATION_SEC;
           }
           return prev + 1;
         });
@@ -185,6 +187,31 @@ export const NewSessionPage: React.FC = () => {
 
   const handleSubmitSession = async () => {
     setSubmitError(null);
+    const selectedFile = uploadedFile;
+    const mediaBlob = recordedBlob;
+    const mediaSize = selectedFile?.size ?? mediaBlob?.size ?? 0;
+    if (mediaSize > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      setSubmitError(`The recording must be no larger than ${MAX_FILE_SIZE_MB} MB.`);
+      return;
+    }
+    if (recordingSeconds > MAX_DURATION_SEC) {
+      setSubmitError(`The recording must be no longer than ${MAX_DURATION_SEC} seconds.`);
+      return;
+    }
+    if (!selectedFile && !mediaBlob) {
+      setSubmitError('Choose or record an audio/video clip before submitting.');
+      return;
+    }
+    try {
+      const actualDuration = await readMediaDuration(selectedFile || mediaBlob!, mediaType);
+      if (!Number.isFinite(actualDuration) || actualDuration <= 0 || actualDuration > MAX_DURATION_SEC) {
+        setSubmitError(`Choose a valid clip no longer than ${MAX_DURATION_SEC} seconds.`);
+        return;
+      }
+    } catch (error: any) {
+      setSubmitError(error.message || 'Could not validate this media file.');
+      return;
+    }
     setIsSubmitting(true);
     setPollingStep('Uploading clip...');
 
@@ -193,10 +220,10 @@ export const NewSessionPage: React.FC = () => {
       formData.append('language', language);
       formData.append('goal', goal);
 
-      if (recordedBlob) {
-        formData.append('file', recordedBlob, 'recording.webm');
-      } else if (uploadedFile) {
-        formData.append('file', uploadedFile);
+      if (mediaBlob) {
+        formData.append('file', mediaBlob, 'recording.webm');
+      } else if (selectedFile) {
+        formData.append('file', selectedFile);
       }
 
       const createRes = await api.sessions.create(formData);
@@ -395,7 +422,7 @@ export const NewSessionPage: React.FC = () => {
                   <span className="text-3xl font-mono font-bold text-slate-900">
                     {formatTimer(recordingSeconds)}
                   </span>
-                  <span className="text-xs text-slate-500">/ 03:00 max</span>
+                    <span className="text-xs text-slate-500">/ {formatTimer(MAX_DURATION_SEC)} max</span>
                 </div>
                 <button
                   onClick={stopRecording}
@@ -450,20 +477,36 @@ export const NewSessionPage: React.FC = () => {
               <span className="text-xs font-bold text-slate-700">
                 {uploadedFile ? uploadedFile.name : 'Click to upload MP4, WebM, MP3, WAV, or OGG'}
               </span>
-              <span className="text-[11px] text-slate-400 mt-1">Max upload limit: {MAX_FILE_SIZE_MB}MB</span>
+              <span className="text-[11px] text-slate-400 mt-1">Max upload limit: {MAX_FILE_SIZE_MB}MB · Max duration: {MAX_DURATION_SEC / 60} minutes</span>
               <input
                 type="file"
-                accept="video/*,audio/*"
+                accept=".mp4,.mov,.webm,.mp3,.wav,.ogg,.m4a,video/mp4,video/quicktime,video/webm,audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/webm"
                 className="hidden"
-                onChange={(e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    setUploadedFile(e.target.files[0]);
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setUploadError(null);
+                  setUploadedFile(null);
+                  if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+                    setUploadError(`Choose a file smaller than ${MAX_FILE_SIZE_MB} MB.`);
+                    e.target.value = '';
+                    return;
+                  }
+                  try {
+                    const duration = await readMediaDuration(file, mediaType);
+                    if (!Number.isFinite(duration) || duration <= 0) throw new Error('Could not read the clip duration.');
+                    if (duration > MAX_DURATION_SEC) throw new Error(`Choose a clip no longer than ${MAX_DURATION_SEC} seconds.`);
+                    setUploadedFile(file);
+                  } catch (error: any) {
+                    setUploadError(error.message || 'Could not validate this media file.');
                   }
                 }}
               />
             </label>
           </div>
         )}
+
+        {uploadError && <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">{uploadError}</div>}
 
         {submitError && (
           <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">

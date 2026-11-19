@@ -16,7 +16,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const phrases = await SavedPhrase.find({ userId: req.userId }).sort({ createdAt: -1 });
     res.status(200).json(phrases);
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to fetch saved phrases' });
+    res.status(500).json({ error: 'Failed to fetch saved phrases.' });
   }
 });
 
@@ -32,7 +32,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     );
     res.status(200).json(saved);
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to save phrase' });
+    res.status(500).json({ error: 'Failed to save phrase.' });
   }
 });
 
@@ -43,7 +43,7 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
     if (!result) return res.status(404).json({ error: 'Saved phrase not found' });
     res.status(200).json({ message: 'Saved phrase deleted successfully' });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to delete phrase' });
+    res.status(500).json({ error: 'Failed to delete phrase.' });
   }
 });
 

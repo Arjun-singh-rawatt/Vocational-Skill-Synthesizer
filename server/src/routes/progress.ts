@@ -50,7 +50,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     }
 
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to fetch progress' });
+    res.status(500).json({ error: 'Failed to fetch progress.' });
   }
 });
 

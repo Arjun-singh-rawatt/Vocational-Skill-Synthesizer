@@ -7,7 +7,8 @@ import { PracticeCalendar } from '../components/PracticeCalendar';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getMenu, resolveReply, formatReportSection, chatMenuSettings } from '../lib/chatMenu';
-import { ALLOWED_AUDIO_FORMATS, ALLOWED_VIDEO_FORMATS, MAX_FILE_SIZE_MB } from '../data/uploadLimits';
+import { ALLOWED_AUDIO_FORMATS, ALLOWED_VIDEO_FORMATS, MAX_DURATION_SEC, MAX_FILE_SIZE_MB } from '../data/uploadLimits';
+import { readMediaDuration } from '../lib/mediaValidation';
 import {
   Sparkles,
   Video,
@@ -251,9 +252,9 @@ export const DashboardPage: React.FC = () => {
 
       timerRef.current = setInterval(() => {
         setRecordingSeconds((prev) => {
-          if (prev >= 179) {
+          if (prev >= MAX_DURATION_SEC - 1) {
             stopLiveRecording();
-            return 180;
+            return MAX_DURATION_SEC;
           }
           return prev + 1;
         });
@@ -284,9 +285,10 @@ export const DashboardPage: React.FC = () => {
     window.setTimeout(() => { setChatMessages((messages) => [...messages, { role: 'assistant', text: reply, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]); setIsSendingChat(false); }, delay);
   };
 
-  const selectUploadFile = (file?: File, type: 'video' | 'audio' = mediaType) => {
+  const selectUploadFile = async (file?: File, type: 'video' | 'audio' = mediaType) => {
     if (!file) return;
     setSubmitError(null);
+    setUploadedFile(null);
     const allowedExtensions = type === 'video'
       ? /\.(mp4|mov|webm)$/i
       : /\.(mp3|wav|webm|ogg|m4a)$/i;
@@ -296,6 +298,16 @@ export const DashboardPage: React.FC = () => {
     }
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       setSubmitError(`File is too large. The maximum upload size is ${MAX_FILE_SIZE_MB} MB.`);
+      return;
+    }
+    try {
+      const duration = await readMediaDuration(file, type);
+      if (!Number.isFinite(duration) || duration <= 0 || duration > MAX_DURATION_SEC) {
+        setSubmitError(`Choose a valid clip no longer than ${MAX_DURATION_SEC} seconds.`);
+        return;
+      }
+    } catch (error: any) {
+      setSubmitError(error.message || 'Could not validate this media file.');
       return;
     }
     setUploadedFile(file);
@@ -373,6 +385,25 @@ export const DashboardPage: React.FC = () => {
     // Validate inputs
     if (!recordedBlob && !uploadedFile) {
       setSubmitError('Please select or record a video/audio clip first.');
+      setPhase('error');
+      return;
+    }
+
+    const media = recordedBlob || uploadedFile!;
+    if (media.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      setSubmitError(`The recording must be no larger than ${MAX_FILE_SIZE_MB} MB.`);
+      setPhase('error');
+      return;
+    }
+    try {
+      const duration = await readMediaDuration(media, mediaType);
+      if (!Number.isFinite(duration) || duration <= 0 || duration > MAX_DURATION_SEC) {
+        setSubmitError(`Choose a valid clip no longer than ${MAX_DURATION_SEC} seconds.`);
+        setPhase('error');
+        return;
+      }
+    } catch (error: any) {
+      setSubmitError(error.message || 'Could not validate this media file.');
       setPhase('error');
       return;
     }
@@ -911,7 +942,7 @@ export const DashboardPage: React.FC = () => {
                     </div>
                     <div className="text-[11px] text-slate-400">or click to browse</div>
                     <div className="text-[10px] text-slate-400 mt-1.5 font-medium">
-                      Supports {mediaType === 'video' ? ALLOWED_VIDEO_FORMATS : ALLOWED_AUDIO_FORMATS} (Max {MAX_FILE_SIZE_MB}MB)
+                      Supports {mediaType === 'video' ? ALLOWED_VIDEO_FORMATS : ALLOWED_AUDIO_FORMATS} (Max {MAX_FILE_SIZE_MB}MB, {MAX_DURATION_SEC / 60} min)
                     </div>
                   </>
                 )}
