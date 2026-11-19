@@ -63,7 +63,7 @@ const SessionSchema = new Schema<ISession>(
 
 SessionSchema.set('toJSON', {
   transform: (doc, ret: any) => {
-    ret.canReevaluate = Boolean(doc.mediaFilename);
+    ret.canReevaluate = Boolean(doc.report?.transcript);
     delete ret.mediaFilename;
     return ret;
   },

@@ -1,10 +1,12 @@
 import app from './app';
 import { connectDB } from './config/db';
-import { env } from './config/env';
+import { validateEnvironment, env } from './config/env';
+import path from 'path';
+import { sweepUploadsDirectory } from './services/sessionMedia';
 
 async function main() {
-  if (!env.MONGODB_URI) throw new Error('MONGODB_URI is required. Set it in server/.env before starting FluentLens.');
-  if (!env.JWT_SECRET) throw new Error('JWT_SECRET is required. Set it in server/.env before starting FluentLens.');
+  validateEnvironment();
+  sweepUploadsDirectory(path.join(__dirname, '../uploads'));
   await connectDB();
 
   app.listen(env.PORT, () => {

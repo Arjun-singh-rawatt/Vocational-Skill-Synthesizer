@@ -9,14 +9,16 @@ import { env } from './config/env';
 
 const app = express();
 
+// Render terminates public traffic at its load balancer; trust only that single proxy hop.
+app.set('trust proxy', env.NODE_ENV === 'production' ? 1 : false);
+
 // Security middlewares
 app.use(helmet());
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, postman) or matching CLIENT_URL
-      const allowedOrigins = env.CLIENT_URL.split(',').map((value) => value.trim()).filter(Boolean);
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Non-browser clients may omit Origin; browser origins must match a configured URL exactly.
+      if (!origin || env.CLIENT_URLS.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error('Origin is not allowed by CORS'));

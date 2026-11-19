@@ -40,7 +40,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
     res.status(201).json(vocab);
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to save vocabulary word' });
+    res.status(500).json({ error: 'Failed to save vocabulary word.' });
   }
 });
 
@@ -56,7 +56,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const words = await VocabWord.find(filter).sort({ createdAt: -1 });
     res.status(200).json(words);
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to fetch vocabulary words' });
+    res.status(500).json({ error: 'Failed to fetch vocabulary words.' });
   }
 });
 
@@ -70,7 +70,7 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
     }
     res.status(200).json({ message: 'Vocabulary item deleted successfully' });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to delete vocabulary item' });
+    res.status(500).json({ error: 'Failed to delete vocabulary item.' });
   }
 });
 

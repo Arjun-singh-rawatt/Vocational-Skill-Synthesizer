@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import { User } from '../models/User';
 import { env } from '../config/env';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authRateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 const registerSchema = z.object({
@@ -30,7 +31,7 @@ function requireDatabase(res: Response): boolean {
   return false;
 }
 
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', authRateLimiter, async (req: Request, res: Response) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
   if (!requireDatabase(res)) return;
@@ -42,11 +43,11 @@ router.post('/register', async (req: Request, res: Response) => {
     const token = jwt.sign({ userId: user._id.toString() }, env.JWT_SECRET, { expiresIn: '7d' });
     return res.status(201).json({ token, user: formatUser(user) });
   } catch (err: any) {
-    return res.status(mongoose.connection.readyState === 1 ? 500 : 503).json({ error: mongoose.connection.readyState === 1 ? (err.message || 'Registration failed') : 'Account service is unavailable because the database is disconnected.' });
+    return res.status(mongoose.connection.readyState === 1 ? 500 : 503).json({ error: mongoose.connection.readyState === 1 ? (env.NODE_ENV === 'development' ? (err.message || 'Registration failed') : 'Registration failed.') : 'Account service is unavailable because the database is disconnected.' });
   }
 });
 
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
   if (!requireDatabase(res)) return;
@@ -56,7 +57,7 @@ router.post('/login', async (req: Request, res: Response) => {
     const token = jwt.sign({ userId: user._id.toString() }, env.JWT_SECRET, { expiresIn: '7d' });
     return res.status(200).json({ token, user: formatUser(user) });
   } catch (err: any) {
-    return res.status(mongoose.connection.readyState === 1 ? 500 : 503).json({ error: mongoose.connection.readyState === 1 ? (err.message || 'Login failed') : 'Account service is unavailable because the database is disconnected.' });
+    return res.status(mongoose.connection.readyState === 1 ? 500 : 503).json({ error: mongoose.connection.readyState === 1 ? (env.NODE_ENV === 'development' ? (err.message || 'Login failed') : 'Login failed.') : 'Account service is unavailable because the database is disconnected.' });
   }
 });
 
@@ -67,7 +68,7 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!user) return res.status(404).json({ error: 'User account was not found.' });
     return res.status(200).json({ user: formatUser(user) });
   } catch (err: any) {
-    return res.status(mongoose.connection.readyState === 1 ? 500 : 503).json({ error: mongoose.connection.readyState === 1 ? (err.message || 'Failed to fetch user') : 'Account service is unavailable because the database is disconnected.' });
+    return res.status(mongoose.connection.readyState === 1 ? 500 : 503).json({ error: mongoose.connection.readyState === 1 ? (env.NODE_ENV === 'development' ? (err.message || 'Failed to fetch user') : 'Failed to fetch user.') : 'Account service is unavailable because the database is disconnected.' });
   }
 });
 
