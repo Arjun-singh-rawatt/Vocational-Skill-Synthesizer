@@ -7,7 +7,7 @@ describe('Demo Mode Sample Report Verification', () => {
     const parseResult = reportZodSchema.safeParse(sampleReportData);
     expect(parseResult.success).toBe(true);
     if (!parseResult.success) {
-      console.error(parseResult.error.errors);
+      console.error(parseResult.error.issues);
     }
     expect(sampleReportData.language).toBe('English');
     expect(sampleReportData.detected_level).toBe('B2');

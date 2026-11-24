@@ -19,7 +19,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const parseResult = createVocabSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: parseResult.error.errors[0].message });
+      return res.status(400).json({ error: parseResult.error.issues[0].message });
     }
 
     const { word, meaning, example, language, sourceSessionId } = parseResult.data;

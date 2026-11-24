@@ -45,7 +45,7 @@ const upload = multer({
 });
 
 const createSessionSchema = z.object({
-  language: z.enum(['English', 'Japanese'], { errorMap: () => ({ message: 'Language must be English or Japanese.' }) }),
+  language: z.enum(['English', 'Japanese'], { error: 'Language must be English or Japanese.' }),
   level: z.string().optional(),
   goal: z.enum(['conversation', 'interview', 'ielts', 'presentation']),
   temperature: z.string().optional(),
@@ -59,7 +59,7 @@ router.post('/', authMiddleware, sessionRateLimiter, upload.single('file'), asyn
     const parseResult = createSessionSchema.safeParse(req.body);
     if (!parseResult.success) {
       if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      return res.status(400).json({ error: parseResult.error.errors[0].message });
+      return res.status(400).json({ error: parseResult.error.issues[0].message });
     }
 
     const { language, goal, temperature } = parseResult.data;
@@ -171,7 +171,7 @@ const reevaluateSchema = z.object({ transcript: z.string().trim().min(1).max(800
 router.post('/:id/reevaluate', authMiddleware, reevaluateRateLimiter, async (req: AuthRequest, res: Response) => {
   if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid session id.' });
   const parsed = reevaluateSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
   try {
     const session = await Session.findOne({ _id: req.params.id, userId: req.userId });
     if (!session) return res.status(404).json({ error: 'Session not found' });

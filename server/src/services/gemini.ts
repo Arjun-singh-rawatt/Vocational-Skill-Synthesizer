@@ -453,8 +453,8 @@ Improvements instructions:
     const rawJson = JSON.parse(cleanJsonResponse(responseText));
     const parsed = reportZodSchema.safeParse(rawJson);
     if (!parsed.success) {
-      console.warn(`[Gemini] Zod validation failed on initial response: ${parsed.error.errors[0].message}. Retrying once with reminder...`);
-      report = await retryReportValidation(ai, rawJson, parsed.error.errors[0].message, temperature);
+      console.warn(`[Gemini] Zod validation failed on initial response: ${parsed.error.issues[0].message}. Retrying once with reminder...`);
+      report = await retryReportValidation(ai, rawJson, parsed.error.issues[0].message, temperature);
     } else {
       report = parsed.data;
     }

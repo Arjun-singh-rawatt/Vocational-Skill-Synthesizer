@@ -22,7 +22,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   const parsed = createPhraseSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
   const { phrase, context, authorOrSpeaker } = parsed.data;
   try {
     const saved = await SavedPhrase.findOneAndUpdate(
