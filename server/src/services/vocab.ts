@@ -1,6 +1,6 @@
 import { VocabWord } from '../models/VocabWord';
 
-const NO_SPACE_LANGUAGES = ['chinese', 'mandarin', 'japanese', 'thai', 'zh', 'ja', 'th'];
+const NO_SPACE_LANGUAGES = ['chinese', 'mandarin', 'thai', 'zh', 'th'];
 
 export async function checkAndMarkSavedWordsLearned(options: {
   userId: string;

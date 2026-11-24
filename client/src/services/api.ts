@@ -55,6 +55,33 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   return data as T;
 }
 
+function uploadRequest<T>(endpoint: string, formData: FormData, onProgress?: (percentage: number) => void): Promise<T> {
+  if (!API_BASE_URL && !import.meta.env.DEV) {
+    return Promise.reject(new Error('The API URL is not configured. Set VITE_API_URL and rebuild the frontend.'));
+  }
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const token = getAuthToken();
+    xhr.open('POST', `${API_BASE_URL}${endpoint}`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100));
+    });
+    xhr.addEventListener('load', () => {
+      let data: any = {};
+      try { data = JSON.parse(xhr.responseText); } catch { /* Match fetch's empty response fallback. */ }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(data.error || `Request failed with status ${xhr.status}`));
+        return;
+      }
+      resolve(data as T);
+    });
+    xhr.addEventListener('error', () => reject(new TypeError('Failed to fetch')));
+    xhr.send(formData);
+  });
+}
+
 export const api = {
   auth: {
     register: (payload: { email: string; password: string; name: string; timezone: string }) =>
@@ -70,11 +97,8 @@ export const api = {
     me: () => request<{ user: any }>('/api/auth/me'),
   },
   sessions: {
-    create: (formData: FormData) =>
-      request<{ id: string; status: string; mediaType: string; durationSec: number }>('/api/sessions', {
-        method: 'POST',
-        body: formData,
-      }),
+    create: (formData: FormData, onProgress?: (percentage: number) => void) =>
+      uploadRequest<{ id: string; status: string; mediaType: string; durationSec: number }>('/api/sessions', formData, onProgress),
     get: (id: string) => request<any>(`/api/sessions/${id}`),
     list: () => request<any[]>('/api/sessions'),
     reevaluate: (id: string, payload: { transcript?: string; level?: string; temperature?: number }) =>

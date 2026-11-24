@@ -1,5 +1,6 @@
 import rawMenu from '../data/chatMenu.json';
 import { MAX_FILE_SIZE_MB, MAX_DURATION_SEC, ALLOWED_FORMATS } from '../data/uploadLimits';
+import { FLEX_STOPS, flexStopForLevel } from '../data/flex';
 
 export type ChatOption = { id: string; label: string; type: 'menu'|'answer'|'report'; when?: 'any'|'session'|'noSession'; target?: string; reply?: string; replyNoSession?: string; action?: 'openDiary'|'openPhrases'; next?: string; section?: 'vocabulary'|'idioms'|'wordChoices'|'sentences'|'tone'|'creative'; enabled?: boolean };
 export type MenuValidationError = { menuId: string; optionId?: string; message: string };
@@ -94,13 +95,13 @@ export function getMenu(menuId: string, options: { hasSession: boolean }) {
   return { ...menu, options: menu.options.filter((option) => !option.when || option.when === 'any' || (option.when === 'session') === options.hasSession) };
 }
 export function resolveReply(option: ChatOption, context: { hasSession: boolean; temperature: number; level: string; language: string }) {
-  const values: Record<string, string|number> = { temperature: context.temperature, level: context.level, language: context.language, maxFileSizeMB: MAX_FILE_SIZE_MB, maxDurationSec: MAX_DURATION_SEC, allowedFormats: ALLOWED_FORMATS };
+  const values: Record<string, string|number> = { temperature: context.temperature, level: FLEX_STOPS[flexStopForLevel(context.level)].label, language: 'English', maxFileSizeMB: MAX_FILE_SIZE_MB, maxDurationSec: MAX_DURATION_SEC, allowedFormats: ALLOWED_FORMATS };
   return String(context.hasSession ? option.reply : option.replyNoSession || option.reply || 'Menu unavailable.').replace(/{{(\w+)}}/g, (_match, key) => String(values[key] ?? ''));
 }
 export function formatReportSection(section: string, report: any): string {
   const i = report?.improvements || {};
   const empty = data.settings.emptyReportReply || 'Menu unavailable.';
-  if (section === 'vocabulary') return (i.vocabulary_upgrades || []).slice(0, 5).map((x: any) => `- **${x.word}**${x.reading ? ` (${x.reading})` : ''} — ${x.meaning}. _"${x.example}"_`).join('\n') || empty;
+  if (section === 'vocabulary') return (i.vocabulary_upgrades || []).slice(0, 5).map((x: any) => `- **${x.word}** — ${x.meaning}. _"${x.example}"_`).join('\n') || empty;
   if (section === 'idioms') return (i.phrase_upgrades || []).slice(0, 5).map((x: any) => `- **${x.idiom_or_phrase}** — ${x.meaning}. _"${x.upgraded}"_`).join('\n') || empty;
   if (section === 'wordChoices') return (i.word_choices || []).slice(0, 5).map((x: any) => `- ~~${x.original}~~ → **${x.better}** — ${x.reason}`).join('\n') || empty;
   if (section === 'sentences') return (i.sentence_structure || []).length ? `| ${data.settings.sentenceTableYouSaid || 'Menu unavailable.'} | ${data.settings.sentenceTableBetter || 'Menu unavailable.'} |\n|---|---|\n${i.sentence_structure.slice(0, 5).map((x: any) => `| ${x.original} | ${x.improved} |`).join('\n')}` : empty;

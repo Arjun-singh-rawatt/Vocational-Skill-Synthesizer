@@ -60,8 +60,8 @@ MONGODB_URI=mongodb://127.0.0.1:27017/fluentlens
 JWT_SECRET=super_secret_jwt_key_change_in_production
 CLIENT_URL=http://localhost:5173
 PORT=8080
-MAX_UPLOAD_MB=100
-MAX_CLIP_SECONDS=200
+MAX_UPLOAD_MB=250
+MAX_CLIP_SECONDS=180
 ```
 
 **Client Environment (`client/.env`):**
@@ -109,6 +109,7 @@ npm run test:gemini --prefix server -- ./path/to/media.mp3
    - `MONGODB_URI` (MongoDB Atlas connection string)
    - `JWT_SECRET`
    - `CLIENT_URL` (URL of deployed frontend)
+   - `MAX_UPLOAD_MB=250` (set this value in the Render service environment to allow 250 MB uploads)
    - `NODE_ENV=production`
 
 ### Deploy Frontend on Vercel

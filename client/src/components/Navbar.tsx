@@ -12,12 +12,10 @@ export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const [selectedLang, setSelectedLang] = useState(() => {
-    const saved = localStorage.getItem('fluentlens_selected_lang');
-    return LANGUAGES.some((language) => language.code === saved) ? saved! : 'English';
-  });
+  const selectedLang = 'English';
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [comingSoon, setComingSoon] = useState(false);
 
   const langRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -35,12 +33,19 @@ export const Navbar: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (!comingSoon) return;
+    const timeout = setTimeout(() => setComingSoon(false), 2500);
+    return () => clearTimeout(timeout);
+  }, [comingSoon]);
+
   const handleSelectLanguage = (lang: string) => {
-    setSelectedLang(lang);
-    localStorage.setItem('fluentlens_selected_lang', lang);
     setLangDropdownOpen(false);
-    // Dispatch a custom event so Dashboard/Practice area re-renders if needed
-    window.dispatchEvent(new CustomEvent('fluentlens_lang_change', { detail: lang }));
+    if (lang !== 'English') {
+      setComingSoon(true);
+      return;
+    }
+    setComingSoon(false);
   };
 
   const handleLogout = () => {
@@ -105,6 +110,11 @@ export const Navbar: React.FC = () => {
                         {selectedLang === lang.code && <Check className="w-3.5 h-3.5 text-brand-600" />}
                       </button>
                     ))}
+                  </div>
+                )}
+                {comingSoon && (
+                  <div role="status" className="absolute left-0 top-full mt-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-lg">
+                    Coming soon
                   </div>
                 )}
               </div>

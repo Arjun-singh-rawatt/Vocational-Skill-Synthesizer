@@ -55,7 +55,7 @@ export const MyDiaryDrawer: React.FC<MyDiaryDrawerProps> = ({ isOpen, onClose })
         word: newWord.trim(),
         meaning: newMeaning.trim(),
         example: newExample.trim() || `Used in practice session`,
-        language: localStorage.getItem('fluentlens_selected_lang') || 'English',
+        language: 'English',
       });
       setWords((prev) => [saved, ...prev]);
       setNewWord('');

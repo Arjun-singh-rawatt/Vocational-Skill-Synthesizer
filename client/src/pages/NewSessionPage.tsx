@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { MAX_DURATION_SEC, MAX_FILE_SIZE_MB } from '../data/uploadLimits';
-import { readMediaDuration } from '../lib/mediaValidation';
+import { isValidMediaDuration, readMediaDuration } from '../lib/mediaValidation';
 import {
   Video,
   Mic,
@@ -16,18 +16,6 @@ import {
   Play,
   ArrowLeft,
 } from 'lucide-react';
-
-const COMMON_LANGUAGES = [
-  'English',
-  'Spanish',
-  'French',
-  'German',
-  'Mandarin Chinese',
-  'Japanese',
-  'Italian',
-  'Portuguese',
-  'Hindi',
-];
 
 const SPEAKING_PROMPTS: Record<string, string[]> = {
   conversation: [
@@ -55,7 +43,7 @@ const SPEAKING_PROMPTS: Record<string, string[]> = {
 export const NewSessionPage: React.FC = () => {
   const navigate = useNavigate();
 
-  const [language, setLanguage] = useState(() => localStorage.getItem('fluentlens_selected_lang') || 'English');
+  const language = 'English';
   const [goal, setGoal] = useState<'conversation' | 'interview' | 'ielts' | 'presentation'>('interview');
   const [promptIndex, setPromptIndex] = useState(0);
 
@@ -70,6 +58,7 @@ export const NewSessionPage: React.FC = () => {
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [pollingStep, setPollingStep] = useState<string>('Uploading clip...');
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -101,6 +90,7 @@ export const NewSessionPage: React.FC = () => {
 
   const startRecording = async () => {
     setPermissionError(null);
+    setSubmitError(null);
     setRecordedBlob(null);
     setPreviewUrl(null);
     chunksRef.current = [];
@@ -203,8 +193,12 @@ export const NewSessionPage: React.FC = () => {
       return;
     }
     try {
-      const actualDuration = await readMediaDuration(selectedFile || mediaBlob!, mediaType);
-      if (!Number.isFinite(actualDuration) || actualDuration <= 0 || actualDuration > MAX_DURATION_SEC) {
+      const actualDuration = await readMediaDuration(selectedFile || mediaBlob!, mediaType, selectedFile ? undefined : recordingSeconds);
+      if (!Number.isFinite(actualDuration) || actualDuration <= 0) {
+        setSubmitError(`Choose a valid clip no longer than ${MAX_DURATION_SEC} seconds.`);
+        return;
+      }
+      if (!isValidMediaDuration(actualDuration)) {
         setSubmitError(`Choose a valid clip no longer than ${MAX_DURATION_SEC} seconds.`);
         return;
       }
@@ -213,6 +207,7 @@ export const NewSessionPage: React.FC = () => {
       return;
     }
     setIsSubmitting(true);
+    setUploadProgress(0);
     setPollingStep('Uploading clip...');
 
     try {
@@ -226,7 +221,8 @@ export const NewSessionPage: React.FC = () => {
         formData.append('file', selectedFile);
       }
 
-      const createRes = await api.sessions.create(formData);
+      const createRes = await api.sessions.create(formData, setUploadProgress);
+      setUploadProgress(null);
       const sessionId = createRes.id;
 
       setPollingStep('Evaluating fluency, pause ratio & clarity...');
@@ -251,6 +247,7 @@ export const NewSessionPage: React.FC = () => {
       }, 3000);
     } catch (err: any) {
       setIsSubmitting(false);
+      setUploadProgress(null);
       setSubmitError(err.message || 'Failed to initiate session analysis');
     }
   };
@@ -270,7 +267,7 @@ export const NewSessionPage: React.FC = () => {
       <div className="text-center mb-6">
         <h1 className="text-3xl font-extrabold text-slate-900">Start New Practice Session</h1>
         <p className="mt-1.5 text-slate-500 text-xs sm:text-sm max-w-xl mx-auto">
-          Record a 1-3 minute clip speaking in ANY language. Get instant AI coaching on clarity, vocabulary, pause ratio & delivery.
+          Record a 1-3 minute clip speaking in English. Get instant AI coaching on clarity, vocabulary, pause ratio & delivery.
         </p>
       </div>
 
@@ -286,26 +283,9 @@ export const NewSessionPage: React.FC = () => {
             <input
               type="text"
               value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              placeholder="e.g. English, Spanish, French..."
+              readOnly
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition-all font-medium"
             />
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {COMMON_LANGUAGES.map((lang) => (
-                <button
-                  key={lang}
-                  type="button"
-                  onClick={() => setLanguage(lang)}
-                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                    language === lang
-                      ? 'bg-blue-50 border-blue-300 text-blue-700 font-semibold'
-                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  {lang}
-                </button>
-              ))}
-            </div>
           </div>
 
           <div>
@@ -478,6 +458,8 @@ export const NewSessionPage: React.FC = () => {
                 {uploadedFile ? uploadedFile.name : 'Click to upload MP4, WebM, MP3, WAV, or OGG'}
               </span>
               <span className="text-[11px] text-slate-400 mt-1">Max upload limit: {MAX_FILE_SIZE_MB}MB · Max duration: {MAX_DURATION_SEC / 60} minutes</span>
+              <span className="text-[11px] text-slate-500 mt-1 text-center">Files up to 250 MB are supported. Larger videos take longer to upload and analyze, so please keep the tab open.</span>
+              {uploadedFile && uploadedFile.size > 100 * 1024 * 1024 && <span className="text-[11px] text-amber-700 mt-1 text-center">This larger video may take a few minutes to upload and analyze.</span>}
               <input
                 type="file"
                 accept=".mp4,.mov,.webm,.mp3,.wav,.ogg,.m4a,video/mp4,video/quicktime,video/webm,audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/webm"
@@ -495,7 +477,7 @@ export const NewSessionPage: React.FC = () => {
                   try {
                     const duration = await readMediaDuration(file, mediaType);
                     if (!Number.isFinite(duration) || duration <= 0) throw new Error('Could not read the clip duration.');
-                    if (duration > MAX_DURATION_SEC) throw new Error(`Choose a clip no longer than ${MAX_DURATION_SEC} seconds.`);
+                    if (!isValidMediaDuration(duration)) throw new Error(`Choose a clip no longer than ${MAX_DURATION_SEC} seconds.`);
                     setUploadedFile(file);
                   } catch (error: any) {
                     setUploadError(error.message || 'Could not validate this media file.');
@@ -534,6 +516,12 @@ export const NewSessionPage: React.FC = () => {
             )}
           </button>
         </div>
+        {uploadProgress !== null && (
+          <div className="space-y-1.5" aria-live="polite">
+            <div className="flex justify-between text-xs text-slate-600"><span>Uploading... large files can take a few minutes</span><span>{uploadProgress}%</span></div>
+            <div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-blue-600 transition-all" style={{ width: `${uploadProgress}%` }} /></div>
+          </div>
+        )}
 
       </div>
 

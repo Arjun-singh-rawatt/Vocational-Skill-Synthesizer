@@ -13,7 +13,7 @@ export function errorHandler(
   const statusCode = err.code === 'LIMIT_FILE_SIZE' ? 413 : Number.isInteger(rawStatusCode) && rawStatusCode >= 400 && rawStatusCode <= 599 ? rawStatusCode : 500;
   const isDevelopment = process.env.NODE_ENV === 'development';
   const message = err.code === 'LIMIT_FILE_SIZE'
-    ? `Uploaded file exceeds the ${env.MAX_UPLOAD_MB} MB limit.`
+    ? `File is too large. Maximum size is ${env.MAX_UPLOAD_MB} MB.`
     : !isDevelopment && statusCode >= 500 ? 'Internal Server Error' : err.message || 'Internal Server Error';
 
   res.status(statusCode).json({
