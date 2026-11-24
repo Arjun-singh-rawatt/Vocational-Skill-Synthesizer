@@ -150,7 +150,7 @@ const COACHING_SYSTEM_INSTRUCTION = `
 You are an expert language and communication coach. Analyze the learner's speaking in the recording.
 In video mode, inspect specific segments for hesitations, tone shifts, eye contact, posture, facial expression and gestures.
 Rules:
-(a) judge against the learner's goal and level (CEFR), not against a "native speaker" standard; focus on intelligibility and clarity;
+(a) judge against the learner's goal, not against a "native speaker" standard; Flex/target level controls only the richness of suggested vocabulary and rewrites, never how harshly or easily the speaker's own performance is graded; focus on intelligibility and clarity;
 (b) describe pronunciation as clarity and intonation observations, and do NOT claim precise phoneme-level scoring;
 (c) every key_details item needs a real mm:ss timestamp from the recording;
 (d) be specific, quote what was said, and give a better phrase;
@@ -369,7 +369,7 @@ export async function analyzeMediaWithGemini(options: {
 Provide a complete, detailed evaluation adhering strictly to the JSON schema.
 Ensure timestamps in key_details use mm:ss format. Include the complete verbatim transcript and list all filler words. Also provide improved_transcript: a complete, natural, polished rewrite of the entire transcript, preserving all of the speaker's ideas and sequence while correcting language and removing fillers. Do not summarize, omit sentences, or limit this full rewrite to the examples below.
 
-Learner target level: ${options.level}. Every vocabulary_upgrade, word_choices.better, phrase/idiom suggestion and sentence_structure.improved must use vocabulary and grammar patterns AT this level (JLPT N-level for Japanese, CEFR for English), never harder. If you are not confident a word belongs to this level, choose a more common word you are confident about. Do not print level labels in the output. Explanations are written in English.
+Learner target level: ${options.level}. Every vocabulary_upgrade, word_choices.better, phrase/idiom suggestion and sentence_structure.improved must use vocabulary and grammar patterns AT this level (CEFR for English), never harder. If you are not confident a word belongs to this level, choose a more common word you are confident about. Do not print level labels in the output. Explanations are written in English.
 
 Improvements instructions:
 - Cap each improvements array (word_choices, vocabulary_upgrades, phrase_upgrades, sentence_structure) at 5 items maximum to keep responses small and fast.

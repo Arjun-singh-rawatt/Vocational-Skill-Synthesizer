@@ -1,5 +1,5 @@
 // Keep these client-facing limits aligned with the server defaults in server/src/config/env.ts.
-export const MAX_FILE_SIZE_MB = 50;
+export const MAX_FILE_SIZE_MB = 250;
 export const MAX_DURATION_SEC = 180;
 export const ALLOWED_VIDEO_FORMATS = 'MP4, MOV, WEBM';
 export const ALLOWED_AUDIO_FORMATS = 'MP3, WAV, WEBM';

@@ -45,7 +45,7 @@ const upload = multer({
 });
 
 const createSessionSchema = z.object({
-  language: z.enum(['English', 'Japanese'], { error: 'Language must be English or Japanese.' }),
+  language: z.enum(['English'], { error: 'Only English is supported right now.' }),
   level: z.string().optional(),
   goal: z.enum(['conversation', 'interview', 'ielts', 'presentation']),
   temperature: z.string().optional(),
@@ -63,8 +63,8 @@ router.post('/', authMiddleware, sessionRateLimiter, upload.single('file'), asyn
     }
 
     const { language, goal, temperature } = parseResult.data;
-    const level = parseResult.data.level || (language === 'Japanese' ? 'N5' : 'B1');
-    if (!(language === 'Japanese' ? ['N5','N4','N3','N2','N1'] : ['A1','A2','B1','B2','C1','C2']).includes(level)) {
+    const level = parseResult.data.level || 'B1';
+    if (!['A1','A2','B1','B2','C1','C2'].includes(level)) {
       if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
       return res.status(400).json({ error: `Level ${level} is not valid for ${language}.` });
     }
@@ -179,8 +179,8 @@ router.post('/:id/reevaluate', authMiddleware, reevaluateRateLimiter, async (req
     if (session.status !== 'done' || !session.report) return res.status(400).json({ error: 'Session report is not ready.' });
     const transcript = parsed.data.transcript ?? session.report.transcript;
     const level = parsed.data.level ?? session.level;
-    const levels = session.language === 'Japanese' ? ['N5','N4','N3','N2','N1'] : ['A1','A2','B1','B2','C1','C2'];
-    if (!levels.includes(level)) return res.status(400).json({ error: 'Level is not valid for this language.' });
+    const levels = ['A1','A2','B1','B2','C1','C2'];
+    if (!levels.includes(level)) return res.status(400).json({ error: 'Level is not valid for English.' });
     const temperature = parsed.data.temperature ?? session.temperature ?? 0.7;
     const locked = await Session.findOneAndUpdate({ _id: session._id, status: 'done', isReevaluating: { $ne: true } }, { $set: { isReevaluating: true, status: 'processing', temperature, level }, $unset: { errorMessage: 1 } }, { new: true });
     if (!locked) return res.status(409).json({ error: 'Evaluation already in progress' });

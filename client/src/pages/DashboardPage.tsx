@@ -8,7 +8,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getMenu, resolveReply, formatReportSection, chatMenuSettings } from '../lib/chatMenu';
 import { ALLOWED_AUDIO_FORMATS, ALLOWED_VIDEO_FORMATS, MAX_DURATION_SEC, MAX_FILE_SIZE_MB } from '../data/uploadLimits';
-import { readMediaDuration } from '../lib/mediaValidation';
+import { FLEX_STOPS, flexLevelForStop, flexStopForLevel, normalizeFlexLevel } from '../data/flex';
+import { isValidMediaDuration, readMediaDuration } from '../lib/mediaValidation';
 import {
   Sparkles,
   Video,
@@ -77,24 +78,14 @@ const TONE_CONFIG: Record<string, { bg: string; text: string; border: string; em
 export const DashboardPage: React.FC = () => {
   const { user } = useAuth();
 
-
-  // Selected language state (synced with Navbar)
-  const [selectedLanguage, setSelectedLanguage] = useState(() => {
-    const saved = localStorage.getItem('fluentlens_selected_lang');
-    return ['English', 'Japanese'].includes(saved || '') ? saved! : 'English';
+  const [selectedLevel, setSelectedLevel] = useState(() => {
+    try {
+      const saved = localStorage.getItem('fluentlens.level');
+      return normalizeFlexLevel(saved);
+    } catch {
+      return 'B1';
+    }
   });
-  const [selectedLevel, setSelectedLevel] = useState(() => selectedLanguage === 'Japanese' ? 'N5' : 'B1');
-  const levelOptions = selectedLanguage === 'Japanese' ? ['N5', 'N4', 'N3', 'N2', 'N1'] : ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
-  useEffect(() => { try { const saved = localStorage.getItem(`fluentlens.level.${selectedLanguage}`); setSelectedLevel(saved && levelOptions.includes(saved) ? saved : (selectedLanguage === 'Japanese' ? 'N5' : 'B1')); } catch { setSelectedLevel(selectedLanguage === 'Japanese' ? 'N5' : 'B1'); } }, [selectedLanguage]);
-
-  useEffect(() => {
-    const handleLangChange = (e: any) => {
-      setSelectedLanguage(e.detail || 'English');
-      setSelectedLevel(e.detail === 'Japanese' ? 'N5' : 'B1');
-    };
-    window.addEventListener('fluentlens_lang_change', handleLangChange);
-    return () => window.removeEventListener('fluentlens_lang_change', handleLangChange);
-  }, []);
 
   // Workspace & API State
   const [progressData, setProgressData] = useState<any>(null);
@@ -152,13 +143,18 @@ export const DashboardPage: React.FC = () => {
 
   // Recording State
   const [isRecording, setIsRecording] = useState(false);
+  const [isCameraPreviewReady, setIsCameraPreviewReady] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const recordingSecondsRef = useRef(0);
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
   const timerRef = useRef<any>(null);
+  const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSubmitAfterStopRef = useRef(false);
   const videoInputRef = useRef<HTMLInputElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
@@ -166,6 +162,7 @@ export const DashboardPage: React.FC = () => {
 
   // Submitting / Polling state
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [pollingStep, setPollingStep] = useState('Uploading media clip...');
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isReevaluating, setIsReevaluating] = useState(false);
@@ -203,9 +200,18 @@ export const DashboardPage: React.FC = () => {
     return () => {
       stopMediaStream();
       if (timerRef.current) clearInterval(timerRef.current);
+      if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
       if (reevalPollRef.current) clearInterval(reevalPollRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (isCameraPreviewReady && videoPreviewRef.current && streamRef.current) {
+      videoPreviewRef.current.srcObject = streamRef.current;
+    } else if (!isCameraPreviewReady && videoPreviewRef.current) {
+      videoPreviewRef.current.srcObject = null;
+    }
+  }, [isCameraPreviewReady]);
 
   const stopMediaStream = () => {
     if (streamRef.current) {
@@ -214,22 +220,49 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
-  const startLiveRecording = async () => {
+  const prepareLiveRecording = async () => {
     setPermissionError(null);
+    setSubmitError(null);
     setRecordedBlob(null);
     setUploadedFile(null);
     setRecordingSeconds(0);
+    recordingSecondsRef.current = 0;
+    setMediaType('video');
+    autoSubmitAfterStopRef.current = false;
 
     try {
+      if (streamRef.current) {
+        setIsCameraPreviewReady(true);
+        return;
+      }
       const constraints: MediaStreamConstraints = {
         audio: true,
-        video: mediaType === 'video' ? { width: 1280, height: 720 } : false,
+        video: { width: 1280, height: 720 },
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
+      setIsCameraPreviewReady(true);
+    } catch {
+      stopMediaStream();
+      setIsCameraPreviewReady(false);
+      setPermissionError('Microphone / camera access required for live recording.');
+    }
+  };
 
+  const startLiveRecording = () => {
+    const stream = streamRef.current;
+    if (!stream) {
+      setPermissionError('Allow camera and microphone access before starting your recording.');
+      return;
+    }
+
+    setPermissionError(null);
+    setRecordingSeconds(0);
+    recordingSecondsRef.current = 0;
+    autoSubmitAfterStopRef.current = false;
+    try {
       const chunks: Blob[] = [];
-      const mimeType = mediaType === 'video' ? 'video/webm;codecs=vp8,opus' : 'audio/webm;codecs=opus';
+      const mimeType = 'video/webm;codecs=vp8,opus';
       const options = MediaRecorder.isTypeSupported(mimeType) ? { mimeType } : undefined;
 
       const mediaRecorder = new MediaRecorder(stream, options);
@@ -240,11 +273,14 @@ export const DashboardPage: React.FC = () => {
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, {
-          type: mediaType === 'video' ? 'video/webm' : 'audio/webm',
-        });
+        const blob = new Blob(chunks, { type: 'video/webm' });
         setRecordedBlob(blob);
         stopMediaStream();
+        setIsCameraPreviewReady(false);
+        if (autoSubmitAfterStopRef.current) {
+          autoSubmitAfterStopRef.current = false;
+          void handleSubmitSession(blob, recordingSecondsRef.current);
+        }
       };
 
       mediaRecorder.start(1000);
@@ -252,15 +288,20 @@ export const DashboardPage: React.FC = () => {
 
       timerRef.current = setInterval(() => {
         setRecordingSeconds((prev) => {
-          if (prev >= MAX_DURATION_SEC - 1) {
-            stopLiveRecording();
-            return MAX_DURATION_SEC;
-          }
-          return prev + 1;
+          const next = Math.min(prev + 1, MAX_DURATION_SEC);
+          recordingSecondsRef.current = next;
+          return next;
         });
       }, 1000);
-    } catch (err: any) {
-      setPermissionError(`Microphone / camera access required for live recording.`);
+      autoStopTimerRef.current = setTimeout(() => {
+        autoSubmitAfterStopRef.current = true;
+        recordingSecondsRef.current = MAX_DURATION_SEC;
+        setRecordingSeconds(MAX_DURATION_SEC);
+        stopLiveRecording();
+      }, MAX_DURATION_SEC * 1000);
+    } catch {
+      setPermissionError('Unable to start recording. Please check your camera and microphone permissions.');
+      setIsRecording(false);
     }
   };
 
@@ -269,14 +310,24 @@ export const DashboardPage: React.FC = () => {
       mediaRecorderRef.current.stop();
     }
     if (timerRef.current) clearInterval(timerRef.current);
+    if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
+    autoStopTimerRef.current = null;
     setIsRecording(false);
+  };
+
+  const cancelLivePreview = () => {
+    stopMediaStream();
+    setIsCameraPreviewReady(false);
+    setRecordingSeconds(0);
+    recordingSecondsRef.current = 0;
+    autoSubmitAfterStopRef.current = false;
   };
 
   const handleMenuOption = async (option: any) => {
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setChatMessages((messages) => [...messages, { role: 'user', text: option.label, timestamp: now }]);
     if (option.type === 'menu') { setChatMenuId(option.target); setChatMessages((messages) => [...messages, { role: 'assistant', text: getMenu(option.target, { hasSession: canChat }).prompt, timestamp: now }]); return; }
-    let reply = option.type === 'report' ? formatReportSection(option.section, latestSession?.report) : resolveReply(option, { hasSession: canChat, temperature, level: selectedLevel, language: selectedLanguage });
+    let reply = option.type === 'report' ? formatReportSection(option.section, latestSession?.report) : resolveReply(option, { hasSession: canChat, temperature, level: selectedLevel, language: 'English' });
     if (option.action === 'openDiary') setIsDiaryOpen(true);
     if (option.action === 'openPhrases') setIsPhrasesOpen(true);
     if (option.next) setChatMenuId(option.next);
@@ -302,7 +353,7 @@ export const DashboardPage: React.FC = () => {
     }
     try {
       const duration = await readMediaDuration(file, type);
-      if (!Number.isFinite(duration) || duration <= 0 || duration > MAX_DURATION_SEC) {
+      if (!isValidMediaDuration(duration)) {
         setSubmitError(`Choose a valid clip no longer than ${MAX_DURATION_SEC} seconds.`);
         return;
       }
@@ -375,7 +426,7 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
-  const handleSubmitSession = async () => {
+  const handleSubmitSession = async (recordedMedia?: Blob, knownRecordingDuration?: number) => {
     setChatMessages([]);
     setChatMenuId(chatMenuSettings.rootMenu || 'root');
     setLatestSession(null);
@@ -383,21 +434,24 @@ export const DashboardPage: React.FC = () => {
     setReevalError(null);
 
     // Validate inputs
-    if (!recordedBlob && !uploadedFile) {
+    if (!recordedMedia && !recordedBlob && !uploadedFile) {
       setSubmitError('Please select or record a video/audio clip first.');
       setPhase('error');
       return;
     }
 
-    const media = recordedBlob || uploadedFile!;
+    const media = recordedMedia || recordedBlob || uploadedFile!;
     if (media.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       setSubmitError(`The recording must be no larger than ${MAX_FILE_SIZE_MB} MB.`);
       setPhase('error');
       return;
     }
+    const recordedDuration = recordedMedia || recordedBlob
+      ? knownRecordingDuration ?? recordingSecondsRef.current
+      : undefined;
     try {
-      const duration = await readMediaDuration(media, mediaType);
-      if (!Number.isFinite(duration) || duration <= 0 || duration > MAX_DURATION_SEC) {
+      const duration = await readMediaDuration(media, recordedMedia || recordedBlob ? 'video' : mediaType, recordedDuration);
+      if (!isValidMediaDuration(duration)) {
         setSubmitError(`Choose a valid clip no longer than ${MAX_DURATION_SEC} seconds.`);
         setPhase('error');
         return;
@@ -411,22 +465,24 @@ export const DashboardPage: React.FC = () => {
     setSubmittedTemperature(temperature);
     setPhase('analyzing');
     setIsSubmitting(true);
+    setUploadProgress(0);
     setPollingStep('Uploading practice clip...');
 
     try {
       const formData = new FormData();
-      formData.append('language', selectedLanguage);
+      formData.append('language', 'English');
       formData.append('level', selectedLevel);
       formData.append('goal', 'interview');
       formData.append('temperature', temperature.toString());
 
-      if (recordedBlob) {
-        formData.append('file', recordedBlob, 'recording.webm');
+      if (recordedMedia || recordedBlob) {
+        formData.append('file', recordedMedia || recordedBlob!, 'recording.webm');
       } else if (uploadedFile) {
         formData.append('file', uploadedFile);
       }
 
-      const createRes = await api.sessions.create(formData);
+      const createRes = await api.sessions.create(formData, setUploadProgress);
+      setUploadProgress(null);
       const sessionId = createRes.id;
 
       setPollingStep('Evaluating fluency, pause ratio & clarity...');
@@ -459,6 +515,7 @@ export const DashboardPage: React.FC = () => {
       }, 3000);
     } catch (err: any) {
       setIsSubmitting(false);
+      setUploadProgress(null);
       setSubmitError(err.message || 'Failed to submit practice clip.');
       setPhase('error');
     }
@@ -473,6 +530,7 @@ export const DashboardPage: React.FC = () => {
     setUploadedFile(null);
     setRecordedBlob(null);
     setRecordingSeconds(0);
+    recordingSecondsRef.current = 0;
     setSubmitError(null);
     setReevalError(null);
     setIsReevaluating(false);
@@ -525,7 +583,7 @@ export const DashboardPage: React.FC = () => {
     setSavingReportItems((prev) => new Set(prev).add(key));
     setReportSaveError(null);
     try {
-      await api.vocab.save({ ...item, language: latestSession?.language || selectedLanguage, sourceSessionId: latestSession?._id });
+      await api.vocab.save({ ...item, language: 'English', sourceSessionId: latestSession?._id });
       setSavedReportItems((prev) => new Set(prev).add(key));
     } catch (error: any) {
       setReportSaveError(error.message || 'Could not save vocabulary item. Please try again.');
@@ -579,23 +637,25 @@ export const DashboardPage: React.FC = () => {
     })),
   ].filter((item, index, all) => all.findIndex((candidate) => candidate.idiom_or_phrase?.toLocaleLowerCase() === item.idiom_or_phrase?.toLocaleLowerCase()) === index);
   const canChat = phase === 'done' && latestSession?.status === 'done';
-  const hasPendingChanges = Boolean(latestSession?._id && (scriptText !== (latestSession.report?.transcript || '') || selectedLevel !== latestSession.level || temperature !== (latestSession.temperature ?? 0.7)));
+  const hasPendingChanges = Boolean(latestSession?._id && (scriptText !== (latestSession.report?.transcript || '') || selectedLevel !== normalizeFlexLevel(latestSession.level) || temperature !== (latestSession.temperature ?? 0.7)));
+  const flexStopIndex = flexStopForLevel(selectedLevel);
+  const currentFlexStop = FLEX_STOPS[flexStopIndex];
   const chatMaxWidth = chatWidthBounds().max;
 
   return (
-    <div className={`w-full min-w-0 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-3 lg:py-4 min-h-full lg:h-full lg:min-h-0 lg:overflow-hidden overflow-x-hidden flex flex-col ${isDraggingChatWidth ? 'select-none' : ''}`}>
+    <div className={`w-full min-w-0 max-w-[1400px] mx-auto px-3 sm:px-4 lg:px-5 py-2 min-h-full lg:h-full lg:min-h-0 lg:overflow-hidden overflow-x-hidden flex flex-col ${isDraggingChatWidth ? 'select-none' : ''}`}>
       
       {/* MAIN 3-COLUMN DESKTOP GRID (Resizable Chat, Flexible Center, 260px Right) */}
       <div
         ref={dashboardGridRef}
         style={{ ['--chat-w' as any]: `${chatWidth}px` }}
-        className={`relative grid grid-cols-1 lg:grid-cols-[var(--chat-w)_minmax(340px,1fr)_260px] gap-4 lg:gap-5 items-start flex-1 min-h-0 min-w-0 lg:h-full lg:items-stretch ${isDraggingChatWidth ? 'select-none' : ''}`}
+        className={`relative grid grid-cols-1 lg:grid-cols-[var(--chat-w)_minmax(340px,1fr)_260px] gap-3 lg:gap-3 items-start flex-1 min-h-0 min-w-0 lg:h-full lg:items-stretch ${isDraggingChatWidth ? 'select-none' : ''}`}
       >
         
         {/* ================================================== */}
         {/* LEFT COLUMN: CHATBOT & TEMPERATURE (Separate Cards)*/}
         {/* ================================================== */}
-        <div className="space-y-3.5 min-w-0 min-h-0 lg:h-full lg:overflow-y-auto lg:overflow-x-hidden thin-scrollbar">
+        <div className="space-y-3 min-w-0 min-h-0 lg:h-full lg:overflow-y-auto lg:overflow-x-hidden thin-scrollbar">
           
           {/* CARD 1: AI CHATBOT */}
           <div className="w-full min-w-0 bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex flex-col justify-between">
@@ -730,7 +790,7 @@ export const DashboardPage: React.FC = () => {
 
             <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
               <span>Plain</span>
-              <span className="text-right">Playful</span>
+              <span className="text-right">Witty</span>
             </div>
             <p className="text-[10px] text-slate-500">Controls the creativity and humor of your Creative Rewrite. It does not change vocabulary.</p>
 
@@ -741,12 +801,33 @@ export const DashboardPage: React.FC = () => {
             )}
           </div>
 
-          <div className="w-[290px] max-w-full self-start bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs space-y-2">
-            <h3 className="text-xs font-bold text-slate-800">Level</h3>
-            <div className="flex flex-wrap gap-1">
-              {levelOptions.map((level) => <button key={level} type="button" onClick={() => { setSelectedLevel(level); try { localStorage.setItem(`fluentlens.level.${selectedLanguage}`, level); } catch { /* optional preference */ } }} className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${selectedLevel === level ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{level}</button>)}
+          <div className="w-[290px] max-w-full self-start bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs space-y-2.5">
+            <div>
+              <h3 className="text-xs font-bold text-slate-800">Flex</h3>
+              <p className="text-[10px] text-slate-500 mt-0.5">How much do you want to flex your vocab?</p>
             </div>
-            <p className="text-[10px] text-slate-500">Vocabulary and grammar suggestions match this level.</p>
+            <label htmlFor="flex-level-slider" className="block text-[10px] font-medium text-slate-600">Vocabulary richness</label>
+            <input
+              id="flex-level-slider"
+              type="range"
+              min="0"
+              max="4"
+              step="1"
+              value={flexStopIndex}
+              aria-valuetext={currentFlexStop.label}
+              onChange={(event) => {
+                const level = flexLevelForStop(Number(event.currentTarget.value));
+                setSelectedLevel(level);
+                try { localStorage.setItem('fluentlens.level', level); } catch { /* optional preference */ }
+              }}
+              className="w-full h-6 cursor-pointer appearance-none rounded-lg bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-brand-600 [&::-webkit-slider-thumb]:shadow [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-brand-600"
+            />
+            <div className="grid grid-cols-5 gap-0.5 text-[8px] leading-tight text-slate-500">
+              {FLEX_STOPS.map((stop) => <span key={stop.index} className="text-center break-words">{stop.label}</span>)}
+            </div>
+            <div aria-live="polite" className="rounded-lg bg-brand-50 px-2.5 py-2">
+              <p className="text-[10px] font-semibold text-brand-800">{currentFlexStop.label}</p>
+            </div>
           </div>
 
         </div>
@@ -789,7 +870,7 @@ export const DashboardPage: React.FC = () => {
         {/* ================================================== */}
         {/* CENTER COLUMN: PRACTICE AREA & IMPROVEMENTS (Wide) */}
         {/* ================================================== */}
-        <div className="flex flex-col min-h-0 min-w-0 lg:h-full lg:self-stretch lg:overflow-y-auto lg:overflow-x-hidden thin-scrollbar space-y-3.5">
+        <div className="flex flex-col min-h-0 min-w-0 lg:h-full lg:self-stretch lg:overflow-y-auto lg:overflow-x-hidden thin-scrollbar space-y-3">
           
           {/* Record or Upload Practice Card (Collapsible) */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-5 shrink-0 transition-all duration-500 ease-in-out">
@@ -810,7 +891,7 @@ export const DashboardPage: React.FC = () => {
                       {getClipSummaryName()}
                     </div>
                     <div className="text-[10px] text-slate-500">
-                      {selectedLanguage} &bull;{' '}
+                      English &bull;{' '}
                       {phase === 'analyzing'
                         ? 'Processing analysis'
                         : isReevaluating
@@ -855,7 +936,7 @@ export const DashboardPage: React.FC = () => {
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Get AI-powered feedback on your speaking in{' '}
-                  <span className="font-semibold text-brand-600">{selectedLanguage}</span>.
+                  <span className="font-semibold text-brand-600">English</span>.
                 </p>
               </div>
 
@@ -864,11 +945,12 @@ export const DashboardPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => openFilePicker('video')}
+                  disabled={isCameraPreviewReady || isRecording}
                   className={`flex-1 py-2 px-3.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
                     mediaType === 'video'
                       ? 'bg-brand-600 text-white shadow-md shadow-brand-600/20'
                       : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-                  }`}
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
                   <Video className="w-3.5 h-3.5" />
                   <span>Upload Video</span>
@@ -877,11 +959,12 @@ export const DashboardPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => openFilePicker('audio')}
+                  disabled={isCameraPreviewReady || isRecording}
                   className={`flex-1 py-2 px-3.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
                     mediaType === 'audio'
                       ? 'bg-brand-600 text-white shadow-md shadow-brand-600/20'
                       : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-                  }`}
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
                   <Mic className="w-3.5 h-3.5" />
                   <span>Upload Audio</span>
@@ -890,10 +973,10 @@ export const DashboardPage: React.FC = () => {
 
               {/* Dropzone Container (Wide & Compact) */}
               <div
-                onClick={() => (mediaType === 'video' ? videoInputRef : audioInputRef).current?.click()}
+                onClick={() => { if (!isCameraPreviewReady && !isRecording) (mediaType === 'video' ? videoInputRef : audioInputRef).current?.click(); }}
                 onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => { event.preventDefault(); selectUploadFile(event.dataTransfer.files[0]); }}
-                className="border-2 border-dashed border-brand-200/80 hover:border-brand-400 bg-brand-50/20 hover:bg-brand-50/40 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all min-h-[135px] text-center group"
+                onDrop={(event) => { event.preventDefault(); if (!isCameraPreviewReady && !isRecording) selectUploadFile(event.dataTransfer.files[0]); }}
+                className={`relative overflow-hidden border-2 border-dashed border-brand-200/80 rounded-xl flex flex-col items-center justify-center transition-all text-center group ${isCameraPreviewReady ? 'h-[min(45vw,300px)] min-h-[180px] max-h-[300px] p-0 cursor-default bg-slate-950' : 'min-h-[135px] p-4 cursor-pointer hover:border-brand-400 bg-brand-50/20 hover:bg-brand-50/40'}`}
               >
                 <input
                   ref={videoInputRef}
@@ -912,7 +995,12 @@ export const DashboardPage: React.FC = () => {
                   onChange={(e) => { selectUploadFile(e.target.files?.[0], 'audio'); e.currentTarget.value = ''; }}
                 />
 
-                {uploadedFile ? (
+                {isCameraPreviewReady ? (
+                  <div className="absolute inset-0 bg-slate-950">
+                    <video ref={videoPreviewRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-contain transform -scale-x-100" />
+                    <div className="absolute inset-x-0 bottom-0 bg-slate-950/60 px-3 py-2 text-left text-[10px] font-medium text-white">{isRecording ? 'Recording video and audio' : 'Live camera preview · ready when you are'}</div>
+                  </div>
+                ) : uploadedFile ? (
                   <div className="space-y-1">
                     <div className="w-9 h-9 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center mx-auto">
                       <CheckCircle2 className="w-4 h-4" />
@@ -944,28 +1032,21 @@ export const DashboardPage: React.FC = () => {
                     <div className="text-[10px] text-slate-400 mt-1.5 font-medium">
                       Supports {mediaType === 'video' ? ALLOWED_VIDEO_FORMATS : ALLOWED_AUDIO_FORMATS} (Max {MAX_FILE_SIZE_MB}MB, {MAX_DURATION_SEC / 60} min)
                     </div>
+                    <div className="text-[10px] text-slate-500 mt-1">Files up to 250 MB are supported. Larger videos take longer to upload and analyze, so please keep the tab open.</div>
                   </>
                 )}
               </div>
 
               {/* Optional Live Recording Toggle */}
               <div className="flex items-center justify-between">
-                {!isRecording ? (
-                  <button
-                    type="button"
-                    onClick={startLiveRecording}
-                    className="text-xs text-brand-600 hover:text-brand-700 font-semibold flex items-center gap-1.5"
-                  >
-                    <Mic className="w-3.5 h-3.5" />
-                    <span>Or Record Live with Microphone/Camera</span>
-                  </button>
-                ) : (
+                {isRecording ? (
                   <div className="flex items-center justify-between w-full p-2 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
                     <div className="flex items-center gap-2 font-mono font-bold text-xs">
                       <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping" />
                       Recording: {formatTimer(recordingSeconds)}
                     </div>
                     <button
+                      type="button"
                       onClick={stopLiveRecording}
                       className="px-2.5 py-1 bg-rose-600 text-white rounded-lg font-semibold text-xs flex items-center gap-1"
                     >
@@ -973,6 +1054,23 @@ export const DashboardPage: React.FC = () => {
                       Stop
                     </button>
                   </div>
+                ) : isCameraPreviewReady ? (
+                  <div className="flex items-center justify-between w-full gap-2">
+                    <span className="text-xs text-slate-500">Camera and microphone ready</span>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={cancelLivePreview} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+                      <button type="button" onClick={startLiveRecording} className="px-4 py-1.5 rounded-lg bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700">Start</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={prepareLiveRecording}
+                    className="text-xs text-brand-600 hover:text-brand-700 font-semibold flex items-center gap-1.5"
+                  >
+                    <Mic className="w-3.5 h-3.5" />
+                    <span>Or Record Live with Microphone/Camera</span>
+                  </button>
                 )}
 
                 {(uploadedFile || recordedBlob) && (
@@ -1006,7 +1104,7 @@ export const DashboardPage: React.FC = () => {
               {/* Submit Action Buttons */}
               <div className="pt-0.5 flex flex-col sm:flex-row items-center gap-2.5">
                 <button
-                  onClick={handleSubmitSession}
+                  onClick={() => { void handleSubmitSession(); }}
                   disabled={(!uploadedFile && !recordedBlob) || isSubmitting}
                   className="w-full py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl shadow-md shadow-brand-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                 >
@@ -1015,6 +1113,13 @@ export const DashboardPage: React.FC = () => {
                 </button>
 
               </div>
+              <p className="text-[10px] text-slate-500 text-center">Files up to 250 MB are supported. Larger videos take longer to upload and analyze, so please keep the tab open.</p>
+              {uploadProgress !== null && (
+                <div className="space-y-1.5" aria-live="polite">
+                  <div className="flex justify-between text-xs text-slate-600"><span>Uploading... large files can take a few minutes</span><span>{uploadProgress}%</span></div>
+                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-brand-600 transition-all" style={{ width: `${uploadProgress}%` }} /></div>
+                </div>
+              )}
 
             </div>
 
@@ -1053,7 +1158,7 @@ export const DashboardPage: React.FC = () => {
               {latestSession?.report && phase === 'done' && <section className="rounded-xl border border-slate-200 p-3 space-y-2.5">
                 <div className="flex items-center justify-between"><h3 className="text-xs font-bold text-slate-900">Script</h3><button type="button" onClick={handleReevaluate} disabled={isReevaluating || isSubmitting || !hasPendingChanges} className="rounded-lg bg-brand-600 px-2.5 py-1 text-[10px] font-semibold text-white disabled:opacity-50">{isReevaluating ? 'Evaluating…' : 'Re-evaluate'}</button></div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <div className="space-y-1"><div className="flex justify-between text-[10px] font-semibold"><span>Your script</span>{scriptText !== latestSession.report.transcript && <span className="text-amber-700">Edited</span>}</div><textarea value={scriptText || latestSession.report.transcript || ''} onChange={(e) => setScriptText(e.target.value)} spellCheck={false} lang={selectedLanguage === 'Japanese' ? 'ja' : 'en'} maxLength={8000} className="w-full min-h-32 max-h-56 overflow-y-auto resize-y rounded-lg border border-slate-200 p-2 text-xs" /><div className="flex justify-between text-[10px] text-slate-500"><span>AI can mishear words. Fix anything wrong, then press Re-evaluate.</span><span>{scriptText.length}/8000</span></div><button type="button" onClick={() => setScriptText(latestSession.originalTranscript || latestSession.report.originalTranscript || latestSession.report.transcript)} className="text-[10px] text-brand-700">Reset to AI transcript</button></div>
+                  <div className="space-y-1"><div className="flex justify-between text-[10px] font-semibold"><span>Your script</span>{scriptText !== latestSession.report.transcript && <span className="text-amber-700">Edited</span>}</div><textarea value={scriptText || latestSession.report.transcript || ''} onChange={(e) => setScriptText(e.target.value)} spellCheck={false} lang="en" maxLength={8000} className="w-full min-h-32 max-h-56 overflow-y-auto resize-y rounded-lg border border-slate-200 p-2 text-xs" /><div className="flex justify-between text-[10px] text-slate-500"><span>AI can mishear words. Fix anything wrong, then press Re-evaluate.</span><span>{scriptText.length}/8000</span></div><button type="button" onClick={() => setScriptText(latestSession.originalTranscript || latestSession.report.originalTranscript || latestSession.report.transcript)} className="text-[10px] text-brand-700">Reset to AI transcript</button></div>
                   <div className="space-y-1"><div className="flex justify-between text-[10px] font-semibold"><span>Improved script</span><button type="button" onClick={() => void navigator.clipboard.writeText(latestSession.report.improved_transcript || '')} className="text-brand-700">Copy</button></div><div className="min-h-32 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs whitespace-pre-wrap">{latestSession.report.improved_transcript || 'Nothing to show for this yet.'}</div></div>
                 </div>
               </section>}
@@ -1065,6 +1170,9 @@ export const DashboardPage: React.FC = () => {
                     <div className="w-3.5 h-3.5 border-2 border-brand-600/30 border-t-brand-600 rounded-full animate-spin shrink-0" />
                     <span className="text-xs text-brand-900 font-medium">{pollingStep}</span>
                   </div>
+                  {uploadedFile && uploadedFile.size > 100 * 1024 * 1024 && (
+                    <p className="px-3 text-[10px] text-amber-700">This larger video may take a few minutes to upload and analyze.</p>
+                  )}
 
                   {/* Section 1 Skeleton */}
                   <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/60 space-y-2 animate-pulse">
@@ -1332,7 +1440,7 @@ export const DashboardPage: React.FC = () => {
         {/* ================================================== */}
         {/* RIGHT COLUMN: CALENDAR, DIARY, PHRASES             */}
         {/* ================================================== */}
-        <div className="space-y-3.5 min-w-0 min-h-0 lg:h-full lg:overflow-y-auto lg:overflow-x-hidden thin-scrollbar">
+        <div className="space-y-3 min-w-0 min-h-0 lg:h-full lg:overflow-y-auto lg:overflow-x-hidden thin-scrollbar">
           
           <PracticeCalendar practiceDates={progressData?.practiceDates || []} timezone={user?.timezone} />
 

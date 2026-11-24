@@ -26,7 +26,7 @@ export const env = {
   DEMO_MODE: parseBoolean('DEMO_MODE', process.env.DEMO_MODE, false),
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: parsePositiveInteger('PORT', process.env.PORT, 8080),
-  MAX_UPLOAD_MB: Math.min(parsePositiveInteger('MAX_UPLOAD_MB', process.env.MAX_UPLOAD_MB, 50), 50),
+  MAX_UPLOAD_MB: Math.min(parsePositiveInteger('MAX_UPLOAD_MB', process.env.MAX_UPLOAD_MB, 250), 250),
   MAX_CLIP_SECONDS: Math.min(parsePositiveInteger('MAX_CLIP_SECONDS', process.env.MAX_CLIP_SECONDS, 180), 180),
 };
 

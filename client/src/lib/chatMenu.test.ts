@@ -17,7 +17,7 @@ describe('chat menu', () => {
     expect(JSON.stringify(menuJson)).not.toMatch(/gemini|ai response|typing options/i);
   });
   it('resolves configured placeholders', () => {
-    expect(resolveReply({ id: 'a', label: 'a', type: 'answer', reply: '{{level}} {{language}} {{temperature}}' }, { hasSession: true, level: 'N5', language: 'Japanese', temperature: 0.7 })).toBe('N5 Japanese 0.7');
+    expect(resolveReply({ id: 'a', label: 'a', type: 'answer', reply: '{{level}} {{language}} {{temperature}}' }, { hasSession: true, level: 'C1', language: 'English', temperature: 0.7 })).toBe('Polished English 0.7');
   });
   it('skips malformed data and formats report sections with an empty fallback', () => {
     const malformed = createMenu({ settings: { rootMenu: 'r' }, menus: { r: { options: [{ id: 'bad', label: 'oops', type: 'answer' }] } } });
@@ -26,8 +26,8 @@ describe('chat menu', () => {
     for (const section of ['vocabulary','idioms','wordChoices','sentences','tone','creative']) expect(formatReportSection(section, {})).toBe('Nothing to show for this yet.');
   });
   it('formats populated report sections', () => {
-    const report = { improvements: { vocabulary_upgrades: [{ word: '学校', reading: 'がっこう', meaning: 'school', example: '学校へ行く。' }], phrase_upgrades: [{ idiom_or_phrase: 'on time', meaning: 'punctually', upgraded: 'I arrived on time.' }], word_choices: [{ original: 'said', better: 'explained', reason: 'More exact.' }], sentence_structure: [{ original: 'I go.', improved: 'I went.', explanation: 'Past tense.' }], tone: { label: 'calm', reason: 'Steady voice.' }, creative_rewrite: { items: [{ original: 'I went.', rewrite: 'Off I went!', style_note: 'More lively.' }] } } };
-    expect(formatReportSection('vocabulary', report)).toContain('**学校** (がっこう)');
+    const report = { improvements: { vocabulary_upgrades: [{ word: 'reliable', meaning: 'can be trusted', example: 'She is reliable.' }], phrase_upgrades: [{ idiom_or_phrase: 'on time', meaning: 'punctually', upgraded: 'I arrived on time.' }], word_choices: [{ original: 'said', better: 'explained', reason: 'More exact.' }], sentence_structure: [{ original: 'I go.', improved: 'I went.', explanation: 'Past tense.' }], tone: { label: 'calm', reason: 'Steady voice.' }, creative_rewrite: { items: [{ original: 'I went.', rewrite: 'Off I went!', style_note: 'More lively.' }] } } };
+    expect(formatReportSection('vocabulary', report)).toContain('**reliable**');
     expect(formatReportSection('idioms', report)).toContain('**on time**');
     expect(formatReportSection('wordChoices', report)).toContain('**explained**');
     expect(formatReportSection('sentences', report)).toContain('| I went. |');
