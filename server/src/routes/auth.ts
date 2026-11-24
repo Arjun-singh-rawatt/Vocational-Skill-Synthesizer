@@ -33,7 +33,7 @@ function requireDatabase(res: Response): boolean {
 
 router.post('/register', authRateLimiter, async (req: Request, res: Response) => {
   const parsed = registerSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
   if (!requireDatabase(res)) return;
   try {
     const { email, password, name, timezone } = parsed.data;
@@ -49,7 +49,7 @@ router.post('/register', authRateLimiter, async (req: Request, res: Response) =>
 
 router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
   const parsed = loginSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
   if (!requireDatabase(res)) return;
   try {
     const user = await User.findOne({ email: parsed.data.email.toLowerCase() });
