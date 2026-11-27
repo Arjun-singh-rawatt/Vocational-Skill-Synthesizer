@@ -167,16 +167,27 @@ const REPORT_SCHEMA_JSON_STRING = JSON.stringify({
     detected_level: { type: "STRING" },
     transcript: { type: "STRING" },
     improved_transcript: { type: "STRING" },
-    scores: {
+        scores: {
       type: "OBJECT",
       properties: {
-        vocabulary: { type: "NUMBER" },
-        grammar: { type: "NUMBER" },
-        delivery: { type: "NUMBER" },
-        clarity: { type: "NUMBER" },
-        body_language: { type: "NUMBER", nullable: true }
+        vocabulary: { type: "NUMBER", minimum: 0, maximum: 100 },
+        grammar: { type: "NUMBER", minimum: 0, maximum: 100 },
+        delivery: { type: "NUMBER", minimum: 0, maximum: 100 },
+        clarity: { type: "NUMBER", minimum: 0, maximum: 100 },
+        body_language: {
+          type: "NUMBER",
+          minimum: 0,
+          maximum: 100,
+          nullable: true,
+        },
       },
-      required: ["vocabulary", "grammar", "delivery", "clarity"]
+      required: [
+        "vocabulary",
+        "grammar",
+        "delivery",
+        "clarity",
+        "body_language",
+      ],
     },
     plan: {
       type: "OBJECT",
@@ -197,7 +208,13 @@ const REPORT_SCHEMA_JSON_STRING = JSON.stringify({
           suggestion: { type: "STRING" },
           better_phrase: { type: "STRING", nullable: true }
         },
-        required: ["timestamp", "category", "observation", "suggestion"]
+        required: [
+          "timestamp",
+          "category",
+          "observation",
+          "suggestion",
+          "better_phrase"
+       ]
       }
     },
     actions: {
@@ -222,7 +239,7 @@ const REPORT_SCHEMA_JSON_STRING = JSON.stringify({
           example: { type: "STRING" },
           replaces: { type: "STRING", nullable: true }
         },
-        required: ["word", "meaning", "example"]
+        required: ["word", "meaning", "example", "replaces"]
       }
     },
     idiom_suggestions: {
@@ -265,7 +282,7 @@ const REPORT_SCHEMA_JSON_STRING = JSON.stringify({
               example: { type: "STRING" },
               replaces: { type: "STRING", nullable: true }
             },
-            required: ["word", "meaning", "example"]
+            required: ["word", "meaning", "example", "replaces"]
           }
         },
         phrase_upgrades: {
@@ -326,6 +343,44 @@ const REPORT_SCHEMA_JSON_STRING = JSON.stringify({
   ]
 });
 
+
+function toInteractionsJsonSchema(value: any): any {
+  if (Array.isArray(value)) {
+    return value.map(toInteractionsJsonSchema);
+  }
+
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+
+  const converted: Record<string, any> = {};
+
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'nullable') {
+      continue;
+    }
+
+    if (key === 'type' && typeof child === 'string') {
+      converted.type = child.toLowerCase();
+    } else {
+      converted[key] = toInteractionsJsonSchema(child);
+    }
+  }
+
+  if (value.nullable === true) {
+    return {
+      anyOf: [converted, { type: 'null' }],
+    };
+  }
+
+  return converted;
+}
+
+const REPORT_INTERACTIONS_SCHEMA = toInteractionsJsonSchema(
+  JSON.parse(REPORT_SCHEMA_JSON_STRING)
+);
+
+
 export async function analyzeMediaWithGemini(options: {
   filePath: string;
   mimeType: string;
@@ -362,8 +417,22 @@ export async function analyzeMediaWithGemini(options: {
   }
 
   if ((activeFile as any).state === 'FAILED') {
-    throw new Error('Gemini Files API failed to process media file.');
+  if (activeFile.name) {
+    await cleanupGeminiFile(ai, activeFile.name);
   }
+
+  throw new Error('Gemini Files API failed to process media file.');
+}
+
+if ((activeFile as any).state === 'PROCESSING') {
+  if (activeFile.name) {
+    await cleanupGeminiFile(ai, activeFile.name);
+  }
+
+  throw new Error(
+    'Gemini media processing timed out after 90 seconds. Please retry with a shorter recording.'
+  );
+}
 
   const prompt = `Analyze this spoken language recording for a learner whose goal is "${options.goal}" and target language is "${options.targetLanguage}".
 Provide a complete, detailed evaluation adhering strictly to the JSON schema.
@@ -383,33 +452,68 @@ Improvements instructions:
 
   try {
     console.log('[Gemini] Attempting primary path: Interactions API');
-    const interactionInput: any[] = [prompt, activeFile];
+        // Build a properly typed media input for the Interactions API.
+    const mediaUri = activeFile.uri;
 
-    // Note: @google/genai Interactions API is an experimental preview; we pass temperature here in interactionConfig
-    const interactionConfig: any = {
-      systemInstruction: COACHING_SYSTEM_INSTRUCTION,
-      responseMimeType: 'application/json',
-      responseSchema: JSON.parse(REPORT_SCHEMA_JSON_STRING),
-      temperature: 0.2,
-    };
-
-    if (options.mediaType === 'video') {
-      // Set agentic processing for video input part if supported
-      interactionConfig.processing = 'agentic';
+    if (!mediaUri) {
+      throw new Error(
+        'Gemini Files API did not return a URI for the uploaded media.'
+      );
     }
 
-    const interaction = await withGeminiRetry<any>(
-      () => (ai as any).interactions.create({
-        model: env.GEMINI_MODEL,
-        input: interactionInput,
-        config: interactionConfig,
-      }),
+    const mediaMimeType = activeFile.mimeType || options.mimeType;
+
+    const mediaInput =
+      options.mediaType === 'video'
+        ? {
+            type: 'video' as const,
+            uri: mediaUri,
+            mime_type: mediaMimeType,
+            processing: 'static' as const,
+          }
+        : {
+            type: 'audio' as const,
+            uri: mediaUri,
+            mime_type: mediaMimeType,
+          };
+
+    const interaction = await withGeminiRetry(
+      () =>
+        ai.interactions.create({
+          model: env.GEMINI_MODEL,
+
+          input: [
+            mediaInput,
+            { type: 'text', text: prompt },
+          ],
+
+          system_instruction: COACHING_SYSTEM_INSTRUCTION,
+
+          generation_config: {
+            temperature: 0.2,
+          },
+
+          response_format: {
+            type: 'text',
+            mime_type: 'application/json',
+            schema: REPORT_INTERACTIONS_SCHEMA,          },
+        }),
       'media analysis',
     );
 
-    interactionId = interaction.id || interaction.interactionId;
-    responseText = interaction.text || (interaction.outputs && interaction.outputs[0]?.text) || JSON.stringify(interaction.response);
-    pathUsed = options.mediaType === 'video' ? 'Interactions API (agentic video)' : 'Interactions API (audio)';
+    interactionId = interaction.id;
+    responseText = interaction.output_text || '';
+
+    if (!responseText.trim()) {
+      throw new Error(
+        'Gemini Interactions API returned an empty text response.'
+      );
+    }
+
+    pathUsed =
+      options.mediaType === 'video'
+        ? 'Interactions API (static video)'
+        : 'Interactions API (audio)';
     console.log(`[Gemini] Interaction created successfully with ID: ${interactionId}`);
   } catch (primaryErr: any) {
     console.warn(`[Gemini] Primary path (Interactions API) failed/unavailable: ${primaryErr.message}. Falling back to generateContent...`);
