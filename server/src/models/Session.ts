@@ -24,7 +24,6 @@ export interface ISession extends Document {
   mimeType?: string;
   mediaFilename?: string;
   temperature?: number;
-  isReevaluating?: boolean;
   chat: IChatMessage[];
   createdAt: Date;
 }
@@ -55,7 +54,6 @@ const SessionSchema = new Schema<ISession>(
     mimeType: { type: String },
     mediaFilename: { type: String },
     temperature: { type: Number, min: 0, max: 1, default: 0.7 },
-    isReevaluating: { type: Boolean, default: false },
     chat: [ChatMessageSchema],
   },
   { timestamps: true }
@@ -63,7 +61,6 @@ const SessionSchema = new Schema<ISession>(
 
 SessionSchema.set('toJSON', {
   transform: (doc, ret: any) => {
-    ret.canReevaluate = Boolean(doc.report?.transcript);
     delete ret.mediaFilename;
     return ret;
   },

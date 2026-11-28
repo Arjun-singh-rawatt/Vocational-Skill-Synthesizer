@@ -10,7 +10,7 @@ export const Footer: React.FC = () => {
           <span>AI feedback on clarity and delivery; not a certified language assessment.</span>
         </div>
         <div>
-          <span>FluentLens &copy; {new Date().getFullYear()} — Built for Hackathon Practical AI Education</span>
+          <span>Vaani &copy; {new Date().getFullYear()} — Built for Hackathon Practical AI Education</span>
         </div>
       </div>
     </footer>

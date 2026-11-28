@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { VaaniLogo } from './VaaniLogo';
 import { Flame, ChevronDown, LogOut, User as UserIcon, Check } from 'lucide-react';
 
 const LANGUAGES = [
@@ -63,17 +64,8 @@ export const Navbar: React.FC = () => {
           
           {/* LEFT: Logo & Language Selector */}
           <div className="flex items-center gap-4">
-            <Link to="/" className="flex items-center gap-2.5 group">
-              <div className="w-9 h-9 rounded-2xl bg-brand-600 flex items-center justify-center shadow-md shadow-brand-600/20 group-hover:scale-105 transition-transform">
-                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                  <line x1="12" y1="19" x2="12" y2="22"/>
-                </svg>
-              </div>
-              <span className="text-xl font-bold text-slate-900 tracking-tight">
-                FluentLens
-              </span>
+            <Link to="/" className="group rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">
+              <VaaniLogo size="sm" className="transition-transform group-hover:scale-[1.02]" />
             </Link>
 
             {/* Language Selector Dropdown */}

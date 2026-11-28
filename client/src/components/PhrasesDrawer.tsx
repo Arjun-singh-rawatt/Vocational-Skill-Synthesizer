@@ -73,7 +73,7 @@ export const PhrasesDrawer: React.FC<PhrasesDrawerProps> = ({ isOpen, onClose })
           {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}
           {loading ? <p className="py-12 text-center text-xs text-stone-500">Loading phrases…</p> : filtered.length === 0 ? <div className="py-12 text-center space-y-2 text-stone-500"><Sparkles className="w-8 h-8 text-amber-500/70 mx-auto" /><p className="text-sm font-medium text-stone-700">{search ? 'No matching phrases.' : 'No phrases saved yet.'}</p><p className="text-xs">Save an expression from a report or add one above.</p></div> : filtered.map((item) => <article key={item._id} className="p-4 rounded-xl bg-[#f5f1e9] border border-[#e7dfd3] shadow-sm space-y-2"><div className="flex items-start justify-between gap-3"><p className="text-sm font-semibold text-stone-900 leading-relaxed">{item.phrase}</p><button onClick={() => void handleDeletePhrase(item._id)} aria-label={`Delete ${item.phrase}`} className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50"><Trash2 className="w-3.5 h-3.5" /></button></div>{item.context && <p className="text-xs text-stone-600">{item.context}</p>}{item.authorOrSpeaker && <p className="pt-2 border-t border-[#e7dfd3] text-[11px] text-stone-500">— {item.authorOrSpeaker}</p>}</article>)}
         </main>
-        <footer className="p-3 border-t border-[#e7dfd3] text-center text-[11px] text-stone-500">FluentLens • Saved expressions</footer>
+        <footer className="p-3 border-t border-[#e7dfd3] text-center text-[11px] text-stone-500">Vaani • Saved expressions</footer>
       </div>
     </div>
   </div>;

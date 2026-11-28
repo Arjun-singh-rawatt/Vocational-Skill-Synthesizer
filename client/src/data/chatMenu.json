@@ -4,7 +4,7 @@
   "settings": { "rootMenu": "root", "typingDelayMs": 300, "chatTitle": "AI Chatbot", "clearLabel": "Clear chat", "backLabel": "← Back", "mainMenuLabel": "Main menu", "emptyHintBeforeAnalysis": "Pick an option below. Upload a clip to unlock feedback from your own speaking.", "emptyHintAfterAnalysis": "Pick an option to see your results or get help.", "emptyReportReply": "Nothing to show for this yet.", "sentenceTableYouSaid": "You said", "sentenceTableBetter": "Better" },
   "menus": {
     "root": { "prompt": "What would you like help with?", "options": [
-      { "id": "how-it-works", "label": "How does FluentLens work?", "type": "menu", "target": "howItWorks" },
+      { "id": "how-it-works", "label": "How does Vaani work?", "type": "menu", "target": "howItWorks" },
       { "id": "saved-words", "label": "Where are my saved words?", "type": "answer", "reply": "Open My Diary to review words saved from your reports.", "action": "openDiary" },
       { "id": "saved-phrases", "label": "Saved phrases and quotes", "type": "answer", "reply": "Open Saved Phrases to review your collection.", "action": "openPhrases" },
       { "id": "vocabulary", "label": "Show better vocabulary", "type": "report", "section": "vocabulary", "when": "session" },
@@ -14,16 +14,14 @@
       { "id": "tone", "label": "What was my tone?", "type": "report", "section": "tone", "when": "session" },
       { "id": "creative-rewrite", "label": "Show my creative rewrite", "type": "report", "section": "creative", "when": "session" }
     ] },
-    "howItWorks": { "prompt": "How FluentLens works", "options": [
+    "howItWorks": { "prompt": "How Vaani works", "options": [
       { "id": "upload", "label": "Upload or record", "type": "answer", "reply": "Upload or record a short speaking clip, then choose Analyze Practice Session.", "next": "howItWorks" },
       { "id": "formats", "label": "Formats and limits", "type": "answer", "reply": "Formats: {{allowedFormats}}. Maximum size: {{maxFileSizeMB}} MB; maximum duration: {{maxDurationSec}} seconds.", "next": "howItWorks" },
       { "id": "level", "label": "Flex setting", "type": "answer", "reply": "Your Flex is set to {{level}}. It guides the richness of your vocabulary and grammar suggestions.", "next": "howItWorks" },
       { "id": "temperature", "label": "Temperature", "type": "answer", "reply": "Temperature controls creativity and humor in Creative Rewrite only, not vocabulary. Current: {{temperature}}.", "next": "howItWorks" },
-      { "id": "script", "label": "Edit your script", "type": "answer", "reply": "Fix misheard words in Your script, then press Re-evaluate.", "next": "howItWorks" },
-      { "id": "reevaluate", "label": "Re-evaluate", "type": "answer", "reply": "Re-evaluate updates the improved script and language suggestions from your edited text.", "next": "howItWorks" },
       { "id": "streak", "label": "Streak", "type": "answer", "reply": "Your streak counts consecutive days with a completed practice session.", "next": "howItWorks" },
       { "id": "demo", "label": "Sample Demo Report", "type": "answer", "reply": "The sample report demonstrates the feedback format with example speaking data.", "next": "howItWorks" },
-      { "id": "language", "label": "Change language", "type": "answer", "reply": "FluentLens currently supports English.", "next": "howItWorks" },
+      { "id": "language", "label": "Change language", "type": "answer", "reply": "Vaani currently supports English.", "next": "howItWorks" },
       { "id": "resize", "label": "Resize chat", "type": "answer", "reply": "Drag the vertical handle beside the chat column to resize it.", "next": "howItWorks" }
     ] }
   }

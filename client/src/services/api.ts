@@ -101,11 +101,6 @@ export const api = {
       uploadRequest<{ id: string; status: string; mediaType: string; durationSec: number }>('/api/sessions', formData, onProgress),
     get: (id: string) => request<any>(`/api/sessions/${id}`),
     list: () => request<any[]>('/api/sessions'),
-    reevaluate: (id: string, payload: { transcript?: string; level?: string; temperature?: number }) =>
-      request<{ id: string; status: string }>(`/api/sessions/${id}/reevaluate`, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      }),
   },
   vocab: {
     save: (payload: { word: string; meaning: string; example: string; language: string; sourceSessionId?: string }) =>

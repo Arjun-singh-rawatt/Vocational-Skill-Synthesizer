@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
-import { Sparkles, Mail, Lock, User, Globe, ArrowRight } from 'lucide-react';
+import { Mail, Lock, User, Globe, ArrowRight } from 'lucide-react';
+import { VaaniLogo } from '../components/VaaniLogo';
 
 interface AuthPageProps {
   mode: 'login' | 'register';
@@ -49,9 +50,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
         
         {/* Header Icon */}
         <div className="text-center mb-8">
-          <div className="inline-flex p-3 rounded-2xl bg-blue-600 text-white shadow-md shadow-blue-600/20 mb-4">
-            <Sparkles className="w-7 h-7" />
-          </div>
+          <VaaniLogo size="md" className="mb-5" />
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
             {isRegister ? 'Create Your Account' : 'Welcome Back'}
           </h1>

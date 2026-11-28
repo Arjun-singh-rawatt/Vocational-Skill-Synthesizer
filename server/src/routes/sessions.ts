@@ -5,19 +5,17 @@ import fs from 'fs';
 import mongoose from 'mongoose';
 import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
-import { reevaluateRateLimiter, sessionRateLimiter } from '../middleware/rateLimiter';
+import { sessionRateLimiter } from '../middleware/rateLimiter';
 import { Session } from '../models/Session';
 import sampleReportData from '../demo/sampleReport.json';
 import { User } from '../models/User';
 import { env } from '../config/env';
 import { inspectMedia, detectAudioSilence } from '../services/media';
-import { analyzeMediaWithGemini, createCreativeRewrite, reimproveFromTranscript } from '../services/gemini';
+import { analyzeMediaWithGemini, createCreativeRewrite } from '../services/gemini';
 import { calculateFluencyIndex } from '../services/fluency';
 import { calculateStreak } from '../services/streak';
 import { checkAndMarkSavedWordsLearned } from '../services/vocab';
-import {
-  buildAnalysisFailureUpdate,
-} from '../services/sessionMedia';
+import { buildAnalysisFailureUpdate } from '../services/sessionMedia';
 
 const router = Router();
 
@@ -110,7 +108,6 @@ router.post('/', authMiddleware, sessionRateLimiter, upload.single('file'), asyn
       status: 'processing',
       mimeType,
       temperature: tempNum,
-      isReevaluating: false,
       chat: [],
     });
 
@@ -167,37 +164,6 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 });
 
-const reevaluateSchema = z.object({ transcript: z.string().trim().min(1).max(8000).optional(), level: z.string().optional(), temperature: z.number().min(0).max(1).optional() });
-router.post('/:id/reevaluate', authMiddleware, reevaluateRateLimiter, async (req: AuthRequest, res: Response) => {
-  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid session id.' });
-  const parsed = reevaluateSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-  try {
-    const session = await Session.findOne({ _id: req.params.id, userId: req.userId });
-    if (!session) return res.status(404).json({ error: 'Session not found' });
-    if (session.status === 'processing' || session.isReevaluating) return res.status(409).json({ error: 'Evaluation already in progress' });
-    if (session.status !== 'done' || !session.report) return res.status(400).json({ error: 'Session report is not ready.' });
-    const transcript = parsed.data.transcript ?? session.report.transcript;
-    const level = parsed.data.level ?? session.level;
-    const levels = ['A1','A2','B1','B2','C1','C2'];
-    if (!levels.includes(level)) return res.status(400).json({ error: 'Level is not valid for English.' });
-    const temperature = parsed.data.temperature ?? session.temperature ?? 0.7;
-    const locked = await Session.findOneAndUpdate({ _id: session._id, status: 'done', isReevaluating: { $ne: true } }, { $set: { isReevaluating: true, status: 'processing', temperature, level }, $unset: { errorMessage: 1 } }, { new: true });
-    if (!locked) return res.status(409).json({ error: 'Evaluation already in progress' });
-    res.status(202).json({ id: session._id.toString(), status: 'evaluating' });
-    void (async () => { try {
-      const tone = session.report!.improvements.tone;
-      const improved = await reimproveFromTranscript({ transcript, language: session.language, level, goal: session.goal, tone });
-      let creative = null;
-      try { creative = await createCreativeRewrite({ transcript, language: session.language, level, tone: tone.label, temperature }); } catch (error) { console.error('[Creative Rewrite] Failed:', error); }
-      const oldReport: any = { ...session.report! };
-      const report = { ...oldReport, transcript, improved_transcript: improved.improved_transcript, improvements: { ...oldReport.improvements, ...improved.improvements, tone, creative_rewrite: creative } };
-      const fluency = calculateFluencyIndex({ transcript, durationSec: session.durationSec, totalSilenceSec: session.durationSec * (session.fluency?.pauseRatio || 0), geminiFillers: report.filler_words_detected || [], language: session.language });
-      await Session.findByIdAndUpdate(session._id, { $set: { report, fluency, level, temperature, status: 'done', isReevaluating: false }, $unset: { errorMessage: 1 } });
-    } catch (error: any) { await Session.findByIdAndUpdate(session._id, { $set: { status: 'done', isReevaluating: false, errorMessage: env.NODE_ENV === 'development' ? (error.message || 'Re-evaluation failed') : 'Re-evaluation failed.' } }); } })();
-  } catch (error: any) { res.status(500).json({ error: env.NODE_ENV === 'development' ? (error.message || 'Failed to re-evaluate session') : 'Failed to re-evaluate session.' }); }
-});
-
 /**
  * Background Asynchronous Pipeline Job
  */
@@ -212,7 +178,6 @@ async function processSessionAsync(opts: {
   goal: string;
   durationSec: number;
   temperature?: number;
-  mode?: 'initial' | 'reevaluate';
 }) {
   const {
     sessionId,
@@ -225,9 +190,7 @@ async function processSessionAsync(opts: {
     goal,
     durationSec,
     temperature = 0.7,
-    mode = 'initial',
   } = opts;
-  const isReevaluate = mode === 'reevaluate';
 
   try {
     let report: any;
@@ -280,34 +243,31 @@ async function processSessionAsync(opts: {
       language,
     });
 
-    // 5. Update user streak only on the first analysis of a clip
-    if (!isReevaluate) {
-      const user = await User.findById(userId);
-      if (user) {
-        const streakRes = calculateStreak({
-          lastPracticeDate: user.lastPracticeDate,
-          currentStreak: user.currentStreak,
-          longestStreak: user.longestStreak,
-          now: new Date(),
-          timezone: user.timezone || 'UTC',
-        });
-        user.currentStreak = streakRes.currentStreak;
-        user.longestStreak = streakRes.longestStreak;
-        user.lastPracticeDate = streakRes.lastPracticeDate;
-        await user.save();
-      }
+    // 5. Update the user's practice streak
+    const user = await User.findById(userId);
+    if (user) {
+      const streakRes = calculateStreak({
+        lastPracticeDate: user.lastPracticeDate,
+        currentStreak: user.currentStreak,
+        longestStreak: user.longestStreak,
+        now: new Date(),
+        timezone: user.timezone || 'UTC',
+      });
+      user.currentStreak = streakRes.currentStreak;
+      user.longestStreak = streakRes.longestStreak;
+      user.lastPracticeDate = streakRes.lastPracticeDate;
+      await user.save();
     }
 
-    // 6. Save Session as "done" (keep original local media for later re-evaluation)
+    // 6. Save Session as "done"
     await Session.findByIdAndUpdate(sessionId, {
       $set: {
-        ...(isReevaluate ? {} : { originalTranscript: report.transcript }),
+        originalTranscript: report.transcript,
         status: 'done',
         report,
         fluency,
         interactionId,
         temperature,
-        isReevaluating: false,
       },
       $unset: { errorMessage: 1 },
     });
@@ -316,7 +276,7 @@ async function processSessionAsync(opts: {
   } catch (err: any) {
     console.error(`[Background Job Error] Session ${sessionId} failed:`, err);
     const message = env.NODE_ENV === 'development' ? err.message : 'Media analysis failed. Please try again.';
-    await Session.findByIdAndUpdate(sessionId, buildAnalysisFailureUpdate(isReevaluate, message));
+    await Session.findByIdAndUpdate(sessionId, buildAnalysisFailureUpdate(message));
   } finally {
     if (filePath && fs.existsSync(filePath)) {
       try { fs.unlinkSync(filePath); } catch { console.warn('[Uploads] Could not remove a processed temporary file.'); }

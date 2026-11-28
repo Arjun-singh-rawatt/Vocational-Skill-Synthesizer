@@ -99,7 +99,6 @@ export const DashboardPage: React.FC = () => {
   const [savingReportItems, setSavingReportItems] = useState<Set<string>>(new Set());
   const [reportSaveError, setReportSaveError] = useState<string | null>(null);
   const [submittedTemperature, setSubmittedTemperature] = useState<number | null>(null);
-  const [scriptText, setScriptText] = useState('');
 
   // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -165,10 +164,6 @@ export const DashboardPage: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [pollingStep, setPollingStep] = useState('Uploading media clip...');
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isReevaluating, setIsReevaluating] = useState(false);
-  const [reevalError, setReevalError] = useState<string | null>(null);
-  const reevalInFlightRef = useRef(false);
-  const reevalPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Drawers open state
   const [isDiaryOpen, setIsDiaryOpen] = useState(false);
@@ -201,7 +196,6 @@ export const DashboardPage: React.FC = () => {
       stopMediaStream();
       if (timerRef.current) clearInterval(timerRef.current);
       if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
-      if (reevalPollRef.current) clearInterval(reevalPollRef.current);
     };
   }, []);
 
@@ -373,65 +367,11 @@ export const DashboardPage: React.FC = () => {
     (type === 'video' ? videoInputRef : audioInputRef).current?.click();
   };
 
-  const finishReevaluate = (session?: any) => {
-    if (reevalPollRef.current) {
-      clearInterval(reevalPollRef.current);
-      reevalPollRef.current = null;
-    }
-    reevalInFlightRef.current = false;
-    setIsReevaluating(false);
-
-    if (!session) return;
-
-    if (session.errorMessage) {
-      setReevalError(session.errorMessage);
-      return;
-    }
-
-    setLatestSession(session);
-    setScriptText(session.report?.transcript || '');
-    if (session.report?.improvements) {
-      setImprovements(session.report.improvements);
-    }
-    if (typeof session.temperature === 'number') {
-      setSubmittedTemperature(session.temperature);
-    }
-  };
-
-  const handleReevaluate = async () => {
-    if (reevalInFlightRef.current || isReevaluating || isSubmitting) return;
-    if (!latestSession?._id || latestSession.canReevaluate === false) return;
-
-    reevalInFlightRef.current = true;
-    setReevalError(null);
-    setIsReevaluating(true);
-
-    try {
-      await api.sessions.reevaluate(latestSession._id, { temperature, level: selectedLevel, transcript: scriptText });
-      reevalPollRef.current = setInterval(async () => {
-        try {
-          const session = await api.sessions.get(latestSession._id);
-          if (!session.isReevaluating) {
-            finishReevaluate(session);
-          }
-        } catch (err: any) {
-          finishReevaluate();
-          setReevalError(err.message || 'Error checking re-evaluation status.');
-        }
-      }, 3000);
-    } catch (err: any) {
-      reevalInFlightRef.current = false;
-      setIsReevaluating(false);
-      setReevalError(err.message || 'Failed to start re-evaluation.');
-    }
-  };
-
   const handleSubmitSession = async (recordedMedia?: Blob, knownRecordingDuration?: number) => {
     setChatMessages([]);
     setChatMenuId(chatMenuSettings.rootMenu || 'root');
     setLatestSession(null);
     setSubmitError(null);
-    setReevalError(null);
 
     // Validate inputs
     if (!recordedMedia && !recordedBlob && !uploadedFile) {
@@ -494,7 +434,6 @@ export const DashboardPage: React.FC = () => {
             clearInterval(pollInterval);
             setIsSubmitting(false);
             setLatestSession(session);
-            setScriptText(session.report?.transcript || '');
             if (session.report?.improvements) {
               setImprovements(session.report.improvements);
             }
@@ -532,13 +471,6 @@ export const DashboardPage: React.FC = () => {
     setRecordingSeconds(0);
     recordingSecondsRef.current = 0;
     setSubmitError(null);
-    setReevalError(null);
-    setIsReevaluating(false);
-    reevalInFlightRef.current = false;
-    if (reevalPollRef.current) {
-      clearInterval(reevalPollRef.current);
-      reevalPollRef.current = null;
-    }
   };
 
   const formatTimer = (totalSeconds: number) => {
@@ -637,7 +569,6 @@ export const DashboardPage: React.FC = () => {
     })),
   ].filter((item, index, all) => all.findIndex((candidate) => candidate.idiom_or_phrase?.toLocaleLowerCase() === item.idiom_or_phrase?.toLocaleLowerCase()) === index);
   const canChat = phase === 'done' && latestSession?.status === 'done';
-  const hasPendingChanges = Boolean(latestSession?._id && (scriptText !== (latestSession.report?.transcript || '') || selectedLevel !== normalizeFlexLevel(latestSession.level) || temperature !== (latestSession.temperature ?? 0.7)));
   const flexStopIndex = flexStopForLevel(selectedLevel);
   const currentFlexStop = FLEX_STOPS[flexStopIndex];
   const chatMaxWidth = chatWidthBounds().max;
@@ -748,31 +679,6 @@ export const DashboardPage: React.FC = () => {
                 <Thermometer className="w-3.5 h-3.5 text-brand-600" />
                 <span>Temperature</span>
               </div>
-              <button
-                type="button"
-                onClick={handleReevaluate}
-                disabled={
-                  isReevaluating ||
-                  isSubmitting ||
-                  !hasPendingChanges ||
-                  phase !== 'done' ||
-                  !latestSession?._id ||
-                  latestSession.canReevaluate === false
-                }
-                className="px-2.5 py-1 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-              >
-                {isReevaluating ? (
-                  <>
-                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Evaluating…</span>
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-3 h-3" />
-                    <span>Re-evaluate</span>
-                  </>
-                )}
-              </button>
             </div>
 
             <input
@@ -781,10 +687,10 @@ export const DashboardPage: React.FC = () => {
               max="1"
               step="0.05"
               value={temperature}
-              disabled={isReevaluating || isSubmitting}
+              disabled={isSubmitting}
               onChange={(e) => setTemperature(parseFloat(e.target.value))}
               className={`w-full accent-brand-600 h-1.5 bg-slate-200 rounded-lg ${
-                isReevaluating || isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
               }`}
             />
 
@@ -794,11 +700,6 @@ export const DashboardPage: React.FC = () => {
             </div>
             <p className="text-[10px] text-slate-500">Controls the creativity and humor of your Creative Rewrite. It does not change vocabulary.</p>
 
-            {reevalError && (
-              <div className="p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[10px] leading-relaxed">
-                {reevalError}
-              </div>
-            )}
           </div>
 
           <div className="w-[290px] max-w-full self-start bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs space-y-2.5">
@@ -815,12 +716,14 @@ export const DashboardPage: React.FC = () => {
               step="1"
               value={flexStopIndex}
               aria-valuetext={currentFlexStop.label}
+              disabled={isSubmitting || phase === 'analyzing'}
               onChange={(event) => {
+                if (isSubmitting || phase === 'analyzing') return;
                 const level = flexLevelForStop(Number(event.currentTarget.value));
                 setSelectedLevel(level);
                 try { localStorage.setItem('fluentlens.level', level); } catch { /* optional preference */ }
               }}
-              className="w-full h-6 cursor-pointer appearance-none rounded-lg bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-brand-600 [&::-webkit-slider-thumb]:shadow [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-brand-600"
+              className="flex-level-slider w-full h-6 cursor-pointer appearance-none rounded-lg bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-brand-600 [&::-webkit-slider-thumb]:shadow [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
             />
             <div className="grid grid-cols-5 gap-0.5 text-[8px] leading-tight text-slate-500">
               {FLEX_STOPS.map((stop) => <span key={stop.index} className="text-center break-words">{stop.label}</span>)}
@@ -894,8 +797,6 @@ export const DashboardPage: React.FC = () => {
                       English &bull;{' '}
                       {phase === 'analyzing'
                         ? 'Processing analysis'
-                        : isReevaluating
-                        ? 'Re-evaluating with new temperature'
                         : 'Analysis complete'}
                     </div>
                   </div>
@@ -913,7 +814,6 @@ export const DashboardPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleResetToIdle}
-                      disabled={isReevaluating}
                       className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-brand-50 hover:text-brand-600 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200/80 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <RotateCcw className="w-3 h-3" />
@@ -1140,9 +1040,7 @@ export const DashboardPage: React.FC = () => {
                 <div>
                   <h2 className="text-sm font-bold text-slate-900">Improvements</h2>
                   <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">
-                    {isReevaluating
-                      ? 'Updating your script suggestions and Creative Rewrite.'
-                      : phase === 'done' && submittedTemperature !== null
+                    {phase === 'done' && submittedTemperature !== null
                       ? getTemperatureModeText(submittedTemperature)
                       : phase === 'analyzing'
                       ? 'Analyzing speech improvements...'
@@ -1155,13 +1053,6 @@ export const DashboardPage: React.FC = () => {
             {/* Scrollable Body (Internal scroll only) */}
             <div className="flex-1 min-h-0 overflow-y-auto thin-scrollbar p-4 space-y-3 pb-6">
               
-              {latestSession?.report && phase === 'done' && <section className="rounded-xl border border-slate-200 p-3 space-y-2.5">
-                <div className="flex items-center justify-between"><h3 className="text-xs font-bold text-slate-900">Script</h3><button type="button" onClick={handleReevaluate} disabled={isReevaluating || isSubmitting || !hasPendingChanges} className="rounded-lg bg-brand-600 px-2.5 py-1 text-[10px] font-semibold text-white disabled:opacity-50">{isReevaluating ? 'Evaluating…' : 'Re-evaluate'}</button></div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <div className="space-y-1"><div className="flex justify-between text-[10px] font-semibold"><span>Your script</span>{scriptText !== latestSession.report.transcript && <span className="text-amber-700">Edited</span>}</div><textarea value={scriptText || latestSession.report.transcript || ''} onChange={(e) => setScriptText(e.target.value)} spellCheck={false} lang="en" maxLength={8000} className="w-full min-h-32 max-h-56 overflow-y-auto resize-y rounded-lg border border-slate-200 p-2 text-xs" /><div className="flex justify-between text-[10px] text-slate-500"><span>AI can mishear words. Fix anything wrong, then press Re-evaluate.</span><span>{scriptText.length}/8000</span></div><button type="button" onClick={() => setScriptText(latestSession.originalTranscript || latestSession.report.originalTranscript || latestSession.report.transcript)} className="text-[10px] text-brand-700">Reset to AI transcript</button></div>
-                  <div className="space-y-1"><div className="flex justify-between text-[10px] font-semibold"><span>Improved script</span><button type="button" onClick={() => void navigator.clipboard.writeText(latestSession.report.improved_transcript || '')} className="text-brand-700">Copy</button></div><div className="min-h-32 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs whitespace-pre-wrap">{latestSession.report.improved_transcript || 'Nothing to show for this yet.'}</div></div>
-                </div>
-              </section>}
               {latestSession?.report?.improvements?.creative_rewrite?.items?.length > 0 && phase === 'done' && <section className="rounded-xl border border-slate-200 p-3 space-y-2"><h3 className="text-xs font-bold text-slate-900">Creative Rewrite</h3><p className="text-[10px] text-slate-500">{temperature < 0.35 ? 'Plain' : temperature <= 0.7 ? 'Lively' : 'Playful'} ({temperature.toFixed(2)})</p>{latestSession.report.improvements.creative_rewrite.items.slice(0, 3).map((item: any, index: number) => <div key={index} className="rounded-lg bg-slate-50 p-2 text-xs"><p><span className="text-slate-500">{item.original}</span> → <strong>{item.rewrite}</strong></p><p className="mt-1 text-[10px] text-slate-500">{item.style_note}</p></div>)}</section>}
               {/* SKELETON STATE: analyzing */}
               {phase === 'analyzing' && (

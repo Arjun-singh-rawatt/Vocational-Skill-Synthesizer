@@ -536,7 +536,7 @@ export const NewSessionPage: React.FC = () => {
 
             <div>
               <h3 className="text-lg font-bold text-slate-900">Analyzing Your Speech</h3>
-              <p className="text-xs text-slate-500 mt-1">FluentLens AI is evaluating your delivery and feedback...</p>
+              <p className="text-xs text-slate-500 mt-1">Vaani AI is evaluating your delivery and feedback...</p>
             </div>
 
             <div className="space-y-3 text-left">

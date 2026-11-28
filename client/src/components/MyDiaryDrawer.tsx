@@ -245,7 +245,7 @@ export const MyDiaryDrawer: React.FC<MyDiaryDrawerProps> = ({ isOpen, onClose })
 
           {/* Footer */}
           <div className="p-3 border-t border-[#e7dfd3] bg-[#f3efe6] text-center text-[11px] text-stone-500">
-            FluentLens Notebook &bull; Auto-syncs with practice sessions
+            Vaani Notebook &bull; Auto-syncs with practice sessions
           </div>
 
         </div>

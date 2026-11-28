@@ -44,6 +44,14 @@
   scrollbar-color: #cbd5e1 transparent;
 }
 
+.flex-level-slider:disabled::-webkit-slider-thumb {
+  background-color: #cbd5e1;
+}
+
+.flex-level-slider:disabled::-moz-range-thumb {
+  background-color: #cbd5e1;
+}
+
 @keyframes fadeInUp {
   from {
     opacity: 0;
